@@ -39,3 +39,20 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
+
+# Custom ignores
+dev.db
+dev.db-journal
+public/reports/
+public/uploads/
+*.js
+!next.config.js
+!postcss.config.js
+!tailwind.config.js
+test*.ts
+last_error.txt
+clearDb.ts
+scripts/
+prisma.config.ts

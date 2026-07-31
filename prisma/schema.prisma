@@ -1,0 +1,157 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Para la fase local usamos SQLite
+// Para migrar al Ministerio, basta con cambiar "sqlite" por "sqlserver" o "postgresql"
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String
+  password  String   // Hashed password
+  jobTitle  String?  // Función que desempeña
+  avatar    String?  // Base64 image or predefined avatar ID
+  role      String   @default("USER") // ADMIN, USER
+  permissions String? // JSON string array of allowed modules: ["ingresos", "reportes", "directorio", "configuracion"]
+  logs        SystemLog[]
+  reports     ReportHistory[]
+  reportGroups ReportGroup[]
+  informesCaja InformeCaja[]
+  createdConsulates Consulate[] @relation("CreatedConsulates")
+  createdRecords Record[] @relation("CreatedRecords")
+  updatedRecords Record[] @relation("UpdatedRecords")
+  createdAt   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Consulate {
+  id        Int      @id @default(autoincrement())
+  type      String   // EMBAJADA, CONSULADO
+  region    String   // NORTEAMERICA, EUROPA, etc.
+  country   String   // ESTADOS UNIDOS, MEXICO, etc.
+  location  String   // Washington, D.C., Boston, etc.
+  address   String?  // 1400 Sixteenth Street, N.W., Suite 100... 
+  status      String   @default("ACTIVO") // ACTIVO, INACTIVO
+  createdById Int?
+  createdBy   User?    @relation("CreatedConsulates", fields: [createdById], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Record {
+  id                Int       @id @default(autoincrement())
+  depositDate       DateTime  // Fecha Depósito
+  depositAmount     Float     // Monto Depósito
+  concentrationDate DateTime? // Fecha Concentración
+  days              Int?      // Días Concentración
+  
+  region            String?   // Región
+  country           String?   // País de procedencia
+  location          String?   // Ubicación (Embajada/Consulado)
+  
+  passportValue     Float     @default(0.00) // Valor Pasaporte
+  duiValue          Float     @default(0.00) // Valor DUI
+  consularValue     Float     @default(0.00) // Valor Consular
+  commissionValue   Float     @default(0.00) // Valor Comisión
+  diversosValue     Float     @default(0.00) // Valor Diversos (Ingreso Diverso)
+  
+  status            String    // Estado: IDENTIFICADO DISTRIB, NO IDENTIFICADO, etc.
+  
+  deletedAt         DateTime? // Fecha de eliminación lógica
+  deleteReason      String?   // Razón de la eliminación
+  
+  informeCajaId     Int?      // Vinculación con un Informe de Caja
+  informeCaja       InformeCaja? @relation(fields: [informeCajaId], references: [id])
+  
+  createdById       Int?
+  createdBy         User?     @relation("CreatedRecords", fields: [createdById], references: [id])
+  updatedById       Int?
+  updatedBy         User?     @relation("UpdatedRecords", fields: [updatedById], references: [id])
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model InformeCaja {
+  id              Int       @id @default(autoincrement())
+  correlative     Int?      // Asignado cuando pasa a DEFINITIVO
+  bankAccount     String
+  month           Int
+  year            Int
+  saldoAnterior   Float
+  totalPasaporte  Float
+  totalDui        Float
+  totalConsulares Float
+  totalDiversos   Float
+  saldoPendiente  Float
+  status          String    // PRELIMINAR o DEFINITIVO
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  records         Record[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model SystemLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName  String?  // Guarda el nombre en texto por si el usuario es eliminado
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model ReportHistory {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  reportType  String   // "Informe de Caja", etc.
+  periodMonth Int
+  periodYear  Int
+  status      String   // "PRELIMINAR" o "DEFINITIVO"
+  format      String   // "EXCEL" o "PDF"
+  fileName    String
+  filePath    String   // Ruta local donde se guardó
+  createdAt   DateTime @default(now())
+}
+
+model ReportGroup {
+  id            Int      @id @default(autoincrement())
+  correlative   String   // e.g. "6", "6.1"
+  groupType     String   // "Reportes Consulares" or "No Identificados / No Distribuidos"
+  periodMonth   Int
+  periodYear    Int
+  status        String   // "PRELIMINAR", "DEFINITIVO", "DEFINITIVO MODIFICADO"
+  processStatus String   @default("Generado") // e.g. "Generado", "Finalizado", etc.
+  createdById   Int
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  documents     ReportDocument[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ReportDocument {
+  id            Int      @id @default(autoincrement())
+  groupId       Int
+  group         ReportGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  reportType    String   // e.g. "caja", "saldos", "liquidacion", "cablegraficas"
+  pdfUrl        String?  // URL of generated PDF
+  excelUrl      String?  // URL of generated Excel
+  signedPdfUrl  String?  // URL of uploaded signed PDF
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
