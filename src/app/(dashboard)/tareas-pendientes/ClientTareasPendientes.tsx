@@ -260,7 +260,7 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
   ];
 
   return (
-    <div className="glass-panel" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div className="glass-panel" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
       
       <input type="file" accept="application/pdf" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
 
