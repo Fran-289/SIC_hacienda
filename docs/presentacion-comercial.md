@@ -11,12 +11,14 @@ El SIC reemplaza los procesos manuales y el uso de hojas de cálculo aisladas po
 **Beneficios Clave:**
 - **Reducción de tiempos:** Generación de reportes de saldos y liquidaciones en segundos.
 - **Seguridad:** Arquitectura moderna, encriptación de datos, control de roles (Administrador/Usuario) e historial de auditoría.
-- **Trazabilidad:** Seguimiento en tiempo real del estado de cada ingreso (Ingresado, Revisado, Vinculado).
+- **Trazabilidad:** Seguimiento en tiempo real del estado de cada ingreso (No Identificado, Identificado No Distribuido, Identificado Distribuido) y del ciclo de firma de cada reporte.
 - **Cero papel:** Motor de firma digital que estampa la rúbrica oficial directamente en el PDF, listo para su archivo o distribución.
 
 ---
 
 ## 2. Recorrido por la Interfaz de Usuario
+
+> **Nota:** las capturas de pantalla viven en `docs/capturas/` (ver el listado de archivos requeridos en `docs/capturas/README.md`). Insertar cada imagen antes de distribuir el documento.
 
 ### 2.1. Pantalla de Acceso (Login)
 *(Insertar captura de pantalla del Login aquí)*
@@ -39,7 +41,9 @@ El corazón operativo del sistema. Aquí los usuarios registran las transaccione
 
 Donde la magia ocurre. El sistema agrupa automáticamente los ingresos de un mes y año específicos y genera el paquete documental oficial.
 - **Generación múltiple:** Produce tanto versiones en PDF (listas para firmar) como versiones en Excel (para análisis de datos).
-- 7 tipos de reportes consolidados (Saldos, Caja, Liquidaciones, Transferencias, etc.) generados con 1 solo clic.
+- **5 tipos de reportes consolidados** en un solo clic, en dos grupos:
+  - *Reportes Consulares:* Transferencias Cablegráficas, Liquidación de Fondos, Control de Saldos e Informe de Caja.
+  - *No Identificados / No Distribuidos:* reporte mensual de valores pendientes.
 
 ### 2.4. Tareas Pendientes y Firma Digital
 *(Insertar captura de pantalla de Tareas Pendientes con el "Ojito Verde" y Sello)*
@@ -66,7 +70,7 @@ Un entorno adaptado al usuario moderno:
 `![Directorio](./capturas/directorio.png)`
 
 Otorgan control total a la institución:
-- **Catálogo de Procedencias:** Gestión dinámica de más de 90 embajadas y consulados alrededor del mundo.
+- **Catálogo de Procedencias:** Gestión dinámica de los 90 embajadas y consulados alrededor del mundo (sembrados con `npm run db:seed`).
 - **Control de Acceso:** Creación y suspensión de cuentas de usuario, y asignación de niveles de privilegio en el sistema.
 
 ---

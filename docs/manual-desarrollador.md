@@ -44,11 +44,15 @@ npx prisma generate
 ```
 
 ### Paso 4: Poblado Inicial de Datos (Semillas)
-El sistema necesita al menos un usuario administrador y el catálogo base para funcionar:
+El sistema necesita al menos un usuario administrador y el catálogo base para funcionar. La contraseña del administrador **no tiene valor por defecto**: debés definirla en `.env`:
 ```bash
-# Crea el usuario admin@hacienda.gob.sv (pass: admin123)
-npx tsx prisma/seed.ts
+# .env
+SEED_ADMIN_PASSWORD="TuContraseñaSegura1"
+
+# Crea el usuario admin@hacienda.gob.sv con la contraseña del entorno
+npm run db:seed
 ```
+> Para regenerar la contraseña de un usuario existente: `NEW_PASSWORD="..." npm run reset-admin -- correo@dominio`
 
 ### Paso 5: Arrancar el Servidor
 ```bash
@@ -64,7 +68,7 @@ Abra su navegador en `http://localhost:3000`.
 El código fuente está estructurado de acuerdo a las convenciones de Next.js App Router.
 
 *   `/prisma`: Contiene el esquema de la base de datos (`schema.prisma`) y los scripts de semilla.
-*   `/public/reports`: (Ignorado por Git) Directorio donde se almacenan físicamente los PDFs generados.
+*   `/storage`: (Ignorado por Git) Directorio donde se almacenan físicamente los PDFs y Excel generados; se sirven mediante `GET /api/archivos/[...slug]`.
 *   `/src/app`: Rutas y vistas de la aplicación.
     *   `/src/app/api`: Contiene todos los Route Handlers (Backend).
     *   `/src/app/(dashboard)`: Páginas protegidas que comparten el Sidebar.
@@ -85,22 +89,24 @@ Si requiere agregar una tabla o columna nueva:
 4. **IMPORTANTE:** Reinicie su servidor de desarrollo (`npm run dev`) para que los cambios se reflejen en los Server Components.
 
 ### 4.2 Crear una Nueva API
-Las APIs en Next.js App Router se ubican en `/app/api`.
+Las APIs en Next.js App Router se ubican en `/src/app/api`. La autorización se resuelve con los ayudantes de `src/lib/authz.ts`:
 ```typescript
 // src/app/api/mi-ruta/route.ts
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAuthz } from '@/lib/authz';
 
 export async function POST(req: Request) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    // Verifica sesión + permiso de módulo ('ingresos' | 'reportes' | 'directorio' | null)
+    const auth = await requireAuthz('ingresos');
+    if (!auth.ok) return auth.response;
 
     const data = await req.json();
     // Lógica con prisma...
     return NextResponse.json({ success: true, data });
 }
 ```
+Use `requireAdminAuthz()` cuando la operación sea exclusiva de administradores (usuarios, configuración, firma).
 
 ### 4.3 Generación de Reportes PDF
 Cualquier modificación visual a los PDFs debe hacerse en `/src/lib/reports/generators/`. 
@@ -119,4 +125,4 @@ npm run lint
 npm run build
 ```
 
-El repositorio descarta de forma automática (en `.gitignore`) todos los archivos `.db`, `.js` residuales en la raíz, carpetas `/scripts` y todo el directorio dinámico `/public/reports/` para evitar filtraciones de datos locales de desarrollo hacia producción.
+El repositorio descarta de forma automática (en `.gitignore`) todos los archivos `.db`, los `.js` residuales en la raíz, los archivos de prueba (`test*.ts`), la carpeta `/scripts` y todo el directorio dinámico `/storage/` para evitar filtraciones de datos locales de desarrollo hacia producción.
