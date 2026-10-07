@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAdminAuthz } from '@/lib/authz';
+import { STORAGE_ROOT, storagePublicUrl, resolveStoragePath } from '@/lib/storage';
 import fs from 'fs';
 import path from 'path';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
@@ -9,10 +10,9 @@ import { es } from 'date-fns/locale';
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
+    const auth = await requireAdminAuthz();
+    if (!auth.ok) return auth.response;
+    const session = auth.user;
 
     const { documentId } = await req.json();
 
@@ -46,7 +46,11 @@ export async function POST(req: Request) {
       signerName = aprob;
       signerTitle = aprobCargo;
       isAprobador = true;
-    } else if (doc.group.processStatus === 'Firma Recaudacion' || doc.group.processStatus === 'Firma Recaudación') {
+    } else if (
+      doc.group.processStatus === 'Firma Recaudaciones' ||
+      doc.group.processStatus === 'Firma Recaudacion' ||
+      doc.group.processStatus === 'Firma Recaudación'
+    ) {
       signerName = elab;
       signerTitle = elabCargo;
       isAprobador = false;
@@ -56,7 +60,7 @@ export async function POST(req: Request) {
     }
 
     // Extract Y coordinate if present
-    const [pdfPathPart, queryPart] = doc.pdfUrl.split('?');
+    const [, queryPart] = doc.pdfUrl.split('?');
     // Default fallback if not found (near the bottom instead of the top). 
     let jsPdfSignatureY = 240; 
     
@@ -67,10 +71,10 @@ export async function POST(req: Request) {
       }
     }
 
-    // Resolve local path from URL
-    const originalPdfPath = path.join(process.cwd(), 'public', pdfPathPart);
+    // Resolve local path from URL (acepta formatos nuevo y legacy, sin traversal)
+    const originalPdfPath = resolveStoragePath(doc.pdfUrl);
     
-    if (!fs.existsSync(originalPdfPath)) {
+    if (!originalPdfPath || !fs.existsSync(originalPdfPath)) {
       return NextResponse.json({ error: 'Archivo físico no encontrado' }, { status: 404 });
     }
 
@@ -199,8 +203,8 @@ export async function POST(req: Request) {
 
     const originalFilename = path.basename(originalPdfPath);
     const signedFilename = `signed_${originalFilename}`;
-    const signedPdfPath = path.join(process.cwd(), 'public', 'reports', signedFilename);
-    const signedPublicUrl = `/reports/${signedFilename}`;
+    const signedPdfPath = path.join(STORAGE_ROOT, 'reports', signedFilename);
+    const signedPublicUrl = storagePublicUrl(`reports/${signedFilename}`);
 
     fs.writeFileSync(signedPdfPath, signedBuffer);
 

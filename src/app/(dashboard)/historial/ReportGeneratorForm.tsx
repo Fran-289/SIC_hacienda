@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FileText, Settings, AlertTriangle, ArrowLeft, Eye, Download, FileSpreadsheet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { apiFetch } from '@/lib/client/api';
 
 const reportGroups = [
   { id: 'consulares', name: 'Reportes Consulares' },
@@ -47,7 +48,7 @@ export default function ReportGeneratorForm({ minYear = 2021, currentYear = new 
 
   // --- RESULTS STATE ---
   const [isGenerated, setIsGenerated] = useState(false);
-  const [generatedParams, setGeneratedParams] = useState<any>(null);
+  const [generatedParams, setGeneratedParams] = useState<unknown>(null);
 
   const [actionError, setActionError] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -80,9 +81,9 @@ export default function ReportGeneratorForm({ minYear = 2021, currentYear = new 
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        // Just checking if ANY of the relevant ones have definitivo to set the options.
-        // We can just check 'caja' or 'cablegraficas' to be safe since they share the same period state usually.
-        const res = await fetch(`/api/reportes/check-status?tipo=cablegraficas&mes=${repMonth}&anio=${repYear}`);
+        // El estado DEFINITIVO se consulta por grupo de reporte seleccionado
+        const tipo = grupoReporte === 'no_identificados' ? 'noidentificados' : 'caja';
+        const res = await apiFetch(`/api/reportes/check-status?tipo=${tipo}&mes=${repMonth}&anio=${repYear}`);
         if (res.ok) {
           const data = await res.json();
           setHasDefinitivo(data.hasDefinitivo);
@@ -115,7 +116,7 @@ export default function ReportGeneratorForm({ minYear = 2021, currentYear = new 
         banco: bankAccount
       };
       
-      const res = await fetch('/api/reportes/generar-grupo', {
+      const res = await apiFetch('/api/reportes/generar-grupo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -127,8 +128,8 @@ export default function ReportGeneratorForm({ minYear = 2021, currentYear = new 
       }
 
       setSuccessMessage('El grupo de reportes se generó correctamente. Puedes procesarlo en Tareas Pendientes.');
-    } catch (err: any) {
-      setActionError(err.message);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Error');
     } finally {
       setIsGenerating(false);
     }

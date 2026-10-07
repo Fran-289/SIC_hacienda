@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAuthz, requireAdminAuthz } from '@/lib/authz';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(request: Request) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  const auth = await requireAuthz('directorio');
+  if (!auth.ok) return auth.response;
 
   const url = new URL(request.url);
   const type = url.searchParams.get('type');
   const region = url.searchParams.get('region');
   const country = url.searchParams.get('country');
 
-  const where: any = {};
+  const where: Prisma.ConsulateWhereInput = {};
   if (type) where.type = type;
   if (region) where.region = region;
   if (country) where.country = country;
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
         { location: 'asc' }
       ],
       include: {
-        createdBy: true
+        createdBy: { select: { id: true, name: true } }
       }
     });
     return NextResponse.json(consulates);
@@ -35,12 +36,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
-  if (session.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Prohibido' }, { status: 403 });
-  }
+  const auth = await requireAdminAuthz();
+  if (!auth.ok) return auth.response;
+  const session = auth.user;
 
   try {
     const body = await request.json();
@@ -50,26 +48,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 });
     }
 
-    const consulate = await prisma.consulate.create({
-      data: {
-        type,
-        region,
-        country,
-        location,
-        address: address || null,
-        status: status || 'ACTIVO',
-        createdById: session.id as number,
-        ...(createdAt && { createdAt: new Date(createdAt) })
-      }
-    });
+    const consulate = await prisma.$transaction(async (tx) => {
+      const created = await tx.consulate.create({
+        data: {
+          type,
+          region,
+          country,
+          location,
+          address: address || null,
+          status: status || 'ACTIVO',
+          createdById: session.id,
+          ...(createdAt && { createdAt: new Date(createdAt) })
+        }
+      });
 
-    // Registrar en logs
-    await prisma.systemLog.create({
-      data: {
-        userId: session.id as number,
-        action: 'CREATE_CONSULATE',
-        details: `Agregó la procedencia: ${type} en ${location}, ${country}`,
-      }
+      await tx.systemLog.create({
+        data: {
+          userId: session.id,
+          action: 'CREATE_CONSULATE',
+          details: `Agregó la procedencia: ${type} en ${location}, ${country}`,
+        }
+      });
+
+      return created;
     });
 
     return NextResponse.json(consulate, { status: 201 });

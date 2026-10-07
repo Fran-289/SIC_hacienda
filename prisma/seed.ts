@@ -2,19 +2,33 @@ import "dotenv/config";
 import { PrismaClient } from '@prisma/client';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import bcrypt from 'bcryptjs';
+import { CONSULATES } from './consulates-data';
 
-const adapter = new PrismaBetterSqlite3({ url: 'file:./dev.db' });
+const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL || 'file:./dev.db' });
 const prisma = new PrismaClient({ adapter });
 
-async function main() {
-  console.log('Seeding database...');
+async function seedAdmin() {
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  const existing = await prisma.user.findUnique({ where: { email: 'admin@hacienda.gob.sv' } });
 
-  // Create an initial admin user
-  const hashedPassword = await bcrypt.hash('admin123', 10);
-  
+  if (!adminPassword || adminPassword.length < 8) {
+    if (existing) {
+      console.warn(
+        'AVISO: SEED_ADMIN_PASSWORD no definido; se conserva la contraseña actual de admin@hacienda.gob.sv.\n' +
+        '        Para cambiarla ejecuta: npm run reset-admin'
+      );
+      return;
+    }
+    throw new Error(
+      'SEED_ADMIN_PASSWORD no está definido (o tiene menos de 8 caracteres) y aún no existe el usuario admin.\n' +
+      'Agrégalo a .env antes de ejecutar el seed.'
+    );
+  }
+
+  const hashedPassword = await bcrypt.hash(adminPassword, 10);
   const admin = await prisma.user.upsert({
     where: { email: 'admin@hacienda.gob.sv' },
-    update: {},
+    update: { password: hashedPassword },
     create: {
       email: 'admin@hacienda.gob.sv',
       name: 'Administrador del Sistema',
@@ -22,26 +36,34 @@ async function main() {
       role: 'ADMIN',
     },
   });
-  console.log(`User created: ${admin.email}`);
+  console.log(`Admin listo: ${admin.email}`);
+}
 
-  // Create mock consulates based on the PDF
-  const consulates = [
-    { type: 'EMBAJADA', region: 'AMÉRICA DEL NORTE', country: 'ESTADOS UNIDOS', location: 'Washington, D.C.', address: '1400 Sixteenth Street, N.W., Suite 100, Washington, D.C. 20036' },
-    { type: 'CONSULADO', region: 'AMÉRICA DEL NORTE', country: 'ESTADOS UNIDOS', location: 'Boston, Massachusetts', address: '46 Bennington Street East Boston, MA 02128' },
-    { type: 'CONSULADO', region: 'AMÉRICA DEL NORTE', country: 'ESTADOS UNIDOS', location: 'Chicago, Illinois', address: '177 North State Street, 2do. Piso Mezzanine, Chicago, IL 60601' },
-    { type: 'CONSULADO', region: 'AMÉRICA DEL NORTE', country: 'ESTADOS UNIDOS', location: 'Doral, Florida', address: '8550 NW 33rd Street, Suite 100, Doral, FL 33122' },
-    { type: 'CONSULADO', region: 'AMÉRICA DEL NORTE', country: 'ESTADOS UNIDOS', location: 'Dallas, Texas', address: '7610 Stemmons Fwy. Suite 400, Dallas, Texas 75247' },
-    { type: 'CONSULADO', region: 'AMÉRICA DEL NORTE', country: 'ESTADOS UNIDOS', location: 'Los Ángeles, California', address: '3250 Wilshire Blvd. Suite 550, Los Ángeles, CA, 90010' },
-  ];
+async function seedConsulates() {
+  const existing = await prisma.consulate.findMany({
+    select: { country: true, location: true },
+  });
+  const key = (c: { country: string; location: string }) => `${c.country}|${c.location}`;
+  const present = new Set(existing.map(key));
 
-  for (const c of consulates) {
-    const consulate = await prisma.consulate.create({
-      data: c,
-    });
-    console.log(`Consulate created: ${consulate.location}`);
+  const missing = CONSULATES.filter((c) => !present.has(key(c)));
+  if (missing.length === 0) {
+    console.log(`Directorio consular completo (${existing.length} registros).`);
+    return;
   }
 
-  console.log('Database seeded successfully.');
+  for (const c of missing) {
+    await prisma.consulate.create({ data: c });
+  }
+  const total = existing.length + missing.length;
+  console.log(`Directorio consular: +${missing.length} inserciones, ${total} en total.`);
+}
+
+async function main() {
+  console.log('Sembrando base de datos...');
+  await seedAdmin();
+  await seedConsulates();
+  console.log('Base de datos lista.');
 }
 
 main()

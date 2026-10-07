@@ -5,19 +5,37 @@ import { useRouter } from 'next/navigation';
 import { Save, X, Building2, Calendar, DollarSign, ArrowLeft, Clock, CheckCircle, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { calculateBusinessDays } from '@/lib/utils/dateUtils';
+import { RECORD_STATUSES, STATUS_LABELS } from '@/lib/utils/status';
+import { apiFetch } from '@/lib/client/api';
 
 type Consulate = { id: number; type: string; region: string; country: string; location: string; address: string | null };
 
-export default function ClientEditPage({ initialData, readOnly = false }: { initialData: any, readOnly?: boolean }) {
+type IngresoData = {
+  id: number;
+  status: string;
+  depositDate: Date;
+  depositAmount: number;
+  concentrationDate: Date | null;
+  days: number | null;
+  region: string | null;
+  country: string | null;
+  location: string | null;
+  passportValue: number;
+  duiValue: number;
+  consularValue: number;
+  commissionValue?: number;
+  diversosValue: number;
+  createdBy?: { name: string | null } | null;
+};
+
+const Asterisk = () => <span style={{ color: 'red', cursor: 'help', marginLeft: '0.25rem' }} title="Campo obligatorio">*</span>;
+
+export default function ClientEditPage({ initialData, readOnly = false }: { initialData: IngresoData, readOnly?: boolean }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const estados = [
-    'No identificado',
-    'Identificado no distribuido',
-    'Identificado distribuido',
-  ];
+  const estados = RECORD_STATUSES;
 
   const [consulates, setConsulates] = useState<Consulate[]>([]);
   const [procedenciaId, setProcedenciaId] = useState('');
@@ -26,7 +44,7 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
   const [isCountryOpen, setIsCountryOpen] = useState(false);
 
   const [formData, setFormData] = useState({
-    status: initialData.status || estados[0],
+    status: (initialData.status || RECORD_STATUSES[0]) as string,
     depositDate: initialData.depositDate ? new Date(initialData.depositDate).toISOString().split('T')[0] : '',
     depositAmount: initialData.depositAmount ? initialData.depositAmount.toString() : '',
     concentrationDate: initialData.concentrationDate ? new Date(initialData.concentrationDate).toISOString().split('T')[0] : '',
@@ -39,7 +57,7 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
   });
 
   useEffect(() => {
-    fetch('/api/catalogos/procedencias')
+    apiFetch('/api/catalogos/procedencias')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -107,7 +125,7 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
       setLoading(false);
       return;
     }
-    if (formData.status !== 'No identificado' && !procedenciaId) {
+    if (formData.status !== 'NO IDENTIFICADO' && !procedenciaId) {
       setError('El campo Procedencia es obligatorio para este estado.');
       setLoading(false);
       return;
@@ -121,7 +139,7 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
     const days = parseInt(formData.concentrationDays) || 0;
 
     let region = null, country = null, location = null;
-    if (formData.status !== 'No identificado' && procedenciaId) {
+    if (formData.status !== 'NO IDENTIFICADO' && procedenciaId) {
       const selected = consulates.find(c => c.id === parseInt(procedenciaId));
       if (selected) {
         region = selected.region;
@@ -131,7 +149,7 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
     }
 
     try {
-      const res = await fetch(`/api/ingresos/${initialData.id}`, {
+      const res = await apiFetch(`/api/ingresos/${initialData.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -143,11 +161,11 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
           region,
           country,
           location,
-          passportValue: formData.status === 'Identificado distribuido' ? passport : 0,
-          duiValue: formData.status === 'Identificado distribuido' ? dui : 0,
-          consularValue: formData.status === 'Identificado distribuido' ? consular : 0,
+          passportValue: formData.status === 'IDENTIFICADO DISTRIBUIDO' ? passport : 0,
+          duiValue: formData.status === 'IDENTIFICADO DISTRIBUIDO' ? dui : 0,
+          consularValue: formData.status === 'IDENTIFICADO DISTRIBUIDO' ? consular : 0,
           diversosValue: 0,
-          commissionValue: formData.status === 'Identificado distribuido' ? commission : 0,
+          commissionValue: formData.status === 'IDENTIFICADO DISTRIBUIDO' ? commission : 0,
         }),
       });
 
@@ -176,8 +194,6 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
     if (procedenciaCountrySearch) list = list.filter(c => c.country === procedenciaCountrySearch);
     return list;
   }, [consulates, procedenciaRegion, procedenciaCountrySearch]);
-
-  const Asterisk = () => <span style={{ color: 'red', cursor: 'help', marginLeft: '0.25rem' }} title="Campo obligatorio">*</span>;
 
   return (
     <div className="animate-fade-in" style={{ maxWidth: '800px', margin: '0 auto', width: '100%' }}>
@@ -235,7 +251,7 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
                   onChange={(e) => setFormData({...formData, status: e.target.value})}
                 >
                   {estados.map((e, idx) => (
-                    <option key={idx} value={e} style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-primary)' }}>{e}</option>
+                    <option key={idx} value={e} style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-primary)' }}>{STATUS_LABELS[e]}</option>
                   ))}
                 </select>
               </div>
@@ -321,7 +337,7 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
               </div>
             </fieldset>
 
-            {formData.status !== 'No identificado' && (
+            {formData.status !== 'NO IDENTIFICADO' && (
               <fieldset style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.25rem 0.75rem 0.5rem', margin: 0 }}>
                 <legend style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', padding: '0 0.25rem', fontWeight: 500 }}>Procedencia:<Asterisk /></legend>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
@@ -418,7 +434,7 @@ export default function ClientEditPage({ initialData, readOnly = false }: { init
               </fieldset>
             )}
 
-            {formData.status === 'Identificado distribuido' && (
+            {formData.status === 'IDENTIFICADO DISTRIBUIDO' && (
               <>
                 <fieldset style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.25rem 0.75rem 0.5rem', margin: 0 }}>
                   <legend style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', padding: '0 0.25rem', fontWeight: 500 }}>Total Ingresos:</legend>

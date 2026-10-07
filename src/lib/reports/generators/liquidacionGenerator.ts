@@ -2,8 +2,11 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatCurrency, numeroALetras, getMonthNameSpanish } from '../utils';
 import ExcelJS from 'exceljs';
+import type { Record as DbRecord } from '@prisma/client';
 
-export async function generateLiquidacionPDF(records: any[], month: number, year: number, settings: Record<string, string> = {}, numLiquidacion: number | string = '') {
+type DocWithAutoTable = jsPDF & { lastAutoTable: { finalY: number } };
+
+export async function generateLiquidacionPDF(records: DbRecord[], month: number, year: number, settings: Record<string, string> = {}, numLiquidacion: number | string = '') {
   const doc = new jsPDF({ orientation: 'portrait' });
   const pageWidth = doc.internal.pageSize.width;
   const margin = 14;
@@ -56,7 +59,7 @@ export async function generateLiquidacionPDF(records: any[], month: number, year
     }
   });
 
-  let finalY = (doc as any).lastAutoTable.finalY + 15;
+  let finalY = (doc as DocWithAutoTable).lastAutoTable.finalY + 15;
   const pageHeight = doc.internal.pageSize.height;
 
   doc.setFontSize(8);
@@ -95,7 +98,7 @@ export async function generateLiquidacionPDF(records: any[], month: number, year
   return { blob, filename: `Liquidacion_${month}_${year}.pdf`, signatureY };
 }
 
-export async function generateLiquidacionExcel(records: any[], month: number, year: number, settings: Record<string, string> = {}, numLiquidacion: number | string = '') {
+export async function generateLiquidacionExcel(records: DbRecord[], month: number, year: number, settings: Record<string, string> = {}, numLiquidacion: number | string = '') {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Liquidación');
 

@@ -1,10 +1,14 @@
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { type RowInput } from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { getMonthNameSpanish, formatCurrency, getMetadataString } from '../utils';
+import { formatDateOnly } from '@/lib/utils/dateUtils';
 import ExcelJS from 'exceljs';
+import type { Record as DbRecord } from '@prisma/client';
 
-export async function generateNoIdentificadosPDF(records: any[], month: number, year: number, settings: Record<string, string> = {}) {
+type DocWithAutoTable = jsPDF & { lastAutoTable: { finalY: number } };
+
+export async function generateNoIdentificadosPDF(records: DbRecord[], month: number, year: number, settings: Record<string, string> = {}) {
   const doc = new jsPDF({ orientation: 'portrait' });
   const pageWidth = doc.internal.pageSize.width;
   const margin = 14;
@@ -30,7 +34,7 @@ export async function generateNoIdentificadosPDF(records: any[], month: number, 
   doc.setFont('helvetica', 'normal');
   doc.text(`Pag. 1 de 1`, pageWidth - margin, 15, { align: 'right' });
 
-  const bodyData: any[] = [];
+  const bodyData: RowInput[] = [];
   let totalValor = 0;
   let totalPasaporte = 0;
   let totalDui = 0;
@@ -48,7 +52,7 @@ export async function generateNoIdentificadosPDF(records: any[], month: number, 
     totalSaldo += saldo;
 
     bodyData.push([
-      format(new Date(r.depositDate), 'dd/MM/yyyy'),
+      formatDateOnly(r.depositDate),
       formatCurrency(val),
       r.location || r.country || r.region || 'NO IDENTIFICADO',
       formatZeroAsDash(pas),
@@ -93,7 +97,7 @@ export async function generateNoIdentificadosPDF(records: any[], month: number, 
     }
   });
 
-  const finalY = (doc as any).lastAutoTable.finalY || 45;
+  const finalY = (doc as DocWithAutoTable).lastAutoTable.finalY || 45;
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -106,7 +110,7 @@ export async function generateNoIdentificadosPDF(records: any[], month: number, 
   return { blob, filename: `ReporteSinIdentificar_${month}_${year}.pdf` };
 }
 
-export async function generateNoIdentificadosExcel(records: any[], month: number, year: number, settings: Record<string, string> = {}) {
+export async function generateNoIdentificadosExcel(records: DbRecord[], month: number, year: number, settings: Record<string, string> = {}) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('No Identificados');
 
@@ -156,7 +160,7 @@ export async function generateNoIdentificadosExcel(records: any[], month: number
   records.forEach(r => {
     totalGeneral += r.depositAmount;
     const row = worksheet.addRow([
-      format(new Date(r.depositDate), 'dd/MM/yyyy'),
+      formatDateOnly(r.depositDate),
       r.depositAmount,
       r.location || r.country || r.region || 'NO IDENTIFICADO',
       r.passportValue > 0 ? r.passportValue : '',

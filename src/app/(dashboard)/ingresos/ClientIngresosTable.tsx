@@ -1,16 +1,15 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { format, isWithinInterval, parseISO } from 'date-fns';
-import { Search, Pencil, Trash2, X, AlertTriangle, Printer, FileSpreadsheet, FileText, Lock, ArrowUp, ArrowDown, ArrowUpDown, Eye, Download } from 'lucide-react';
+import { useState, useMemo, useEffect, type CSSProperties } from 'react';
+import { format } from 'date-fns';
+import { Search, Pencil, Trash2, X, AlertTriangle, Printer, FileSpreadsheet, FileText, Lock, ArrowUp, ArrowDown, ArrowUpDown, Eye, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import RegistrarIngresoButton from './RegistrarIngresoButton';
 import { exportRecordsToExcel, exportSingleRecordToExcel } from '@/lib/utils/exportUtils';
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { statusLabel } from '@/lib/utils/status';
+import { formatDateOnly, formatDateOnlyISO } from '@/lib/utils/dateUtils';
+import { apiFetch } from '@/lib/client/api';
 
 type RecordType = {
   id: number;
@@ -45,11 +44,9 @@ type ConsulateType = {
 
 type SortConfig = { key: string; direction: 'asc' | 'desc' } | null;
 
-const formatUTC = (date: Date | string | null | undefined) => {
-  if (!date) return '';
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '';
-  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
+const SortIcon = ({ columnKey, sortConfig }: { columnKey: string; sortConfig: SortConfig }) => {
+  if (sortConfig?.key !== columnKey) return <ArrowUpDown size={12} color="var(--text-muted)" style={{ marginLeft: 4, opacity: 0.5 }} />;
+  return sortConfig.direction === 'asc' ? <ArrowUp size={12} style={{ marginLeft: 4, color: 'var(--accent-primary)' }} /> : <ArrowDown size={12} style={{ marginLeft: 4, color: 'var(--accent-primary)' }} />;
 };
 
 export default function ClientIngresosTable({ 
@@ -78,6 +75,10 @@ export default function ClientIngresosTable({
   // Sort
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   // Delete State
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [modalDelete, setModalDelete] = useState<{dbId: number, displayId: string} | null>(null);
@@ -103,14 +104,10 @@ export default function ClientIngresosTable({
     return records.filter(r => {
       // 1. Top Header Filters
       if (dateFrom && dateTo) {
-        const d = dateFilterType === 'depositDate' ? new Date(r.depositDate) : (r.concentrationDate ? new Date(r.concentrationDate) : null);
-        if (!d) return false;
-        
-        const from = new Date(dateFrom);
-        const to = new Date(dateTo);
-        to.setHours(23, 59, 59, 999);
-        
-        if (!isWithinInterval(d, { start: from, end: to })) return false;
+        const rawDate = dateFilterType === 'depositDate' ? r.depositDate : r.concentrationDate;
+        if (!rawDate) return false;
+        const iso = formatDateOnlyISO(rawDate);
+        if (!iso || iso < dateFrom || iso > dateTo) return false;
       }
 
       if (procedenciaFilter) {
@@ -134,9 +131,9 @@ export default function ClientIngresosTable({
         let cellVal = '';
         switch(key) {
           case 'id': cellVal = String(r.id).padStart(2, '0'); break;
-          case 'fechaIngreso': cellVal = formatUTC(r.depositDate); break;
+          case 'fechaIngreso': cellVal = formatDateOnly(r.depositDate); break;
           case 'montoDeposito': cellVal = r.depositAmount.toFixed(2); break;
-          case 'fechaConcentracion': cellVal = formatUTC(r.concentrationDate); break;
+          case 'fechaConcentracion': cellVal = formatDateOnly(r.concentrationDate); break;
           case 'diasConcentracion': cellVal = r.days?.toString() || ''; break;
           case 'procedencia': cellVal = getProcedencia(r); break;
           case 'totalIngresos': cellVal = r.depositAmount.toFixed(2); break;
@@ -163,8 +160,8 @@ export default function ClientIngresosTable({
     const sortable = [...filteredRecords];
     if (sortConfig !== null) {
       sortable.sort((a, b) => {
-        let aVal: any = '';
-        let bVal: any = '';
+        let aVal: string | number = '';
+        let bVal: string | number = '';
         
         switch(sortConfig.key) {
           case 'id': aVal = a.id; bVal = b.id; break;
@@ -196,6 +193,17 @@ export default function ClientIngresosTable({
     return sortable;
   }, [filteredRecords, sortConfig]);
 
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [dateFilterType, dateFrom, dateTo, procedenciaFilter, montoDepositoFilter, estadoFilter, columnFilters, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedRecords.length / pageSize));
+  const paginatedRecords = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return sortedRecords.slice(start, start + pageSize);
+  }, [sortedRecords, page, pageSize]);
+
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -212,7 +220,7 @@ export default function ClientIngresosTable({
     if (!modalDelete) return;
     setDeletingId(modalDelete.dbId);
     try {
-      const res = await fetch(`/api/ingresos/${modalDelete.dbId}`, { 
+      const res = await apiFetch(`/api/ingresos/${modalDelete.dbId}`, { 
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: deleteReason })
@@ -230,11 +238,6 @@ export default function ClientIngresosTable({
       setModalDelete(null);
       setDeleteReason('');
     }
-  };
-
-  const SortIcon = ({ columnKey }: { columnKey: string }) => {
-    if (sortConfig?.key !== columnKey) return <ArrowUpDown size={12} color="var(--text-muted)" style={{ marginLeft: 4, opacity: 0.5 }} />;
-    return sortConfig.direction === 'asc' ? <ArrowUp size={12} style={{ marginLeft: 4, color: 'var(--accent-primary)' }} /> : <ArrowDown size={12} style={{ marginLeft: 4, color: 'var(--accent-primary)' }} />;
   };
 
   return (
@@ -333,7 +336,7 @@ export default function ClientIngresosTable({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('id')}>
                     ID
-                    <SortIcon columnKey={'id'} />
+                    <SortIcon columnKey={'id'} sortConfig={sortConfig} />
                   </div>
                   <input 
                     type="text" 
@@ -361,16 +364,16 @@ export default function ClientIngresosTable({
                 { key: 'usuarioRegistra', label: 'Ingresado Por', align: 'left', minWidth: '150px' },
                 { key: 'fechaRegistro', label: 'Fecha de ingreso', align: 'center', minWidth: '150px' },
               ].map(col => (
-                <th key={col.key} style={{ padding: '0.5rem', fontWeight: 600, minWidth: col.minWidth, width: col.minWidth, borderRight: '1px solid var(--border-color)', textAlign: col.align as any, whiteSpace: 'nowrap' }}>
+                <th key={col.key} style={{ padding: '0.5rem', fontWeight: 600, minWidth: col.minWidth, width: col.minWidth, borderRight: '1px solid var(--border-color)', textAlign: col.align as CSSProperties['textAlign'], whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: col.align === 'center' ? 'center' : (col.align === 'right' ? 'flex-end' : 'flex-start'), cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => handleSort(col.key)}>
                       {col.label}
-                      <SortIcon columnKey={col.key} />
+                      <SortIcon columnKey={col.key} sortConfig={sortConfig} />
                     </div>
                     <input 
                       type="text" 
                       className="input-control" 
-                      style={{ padding: '0.2rem', marginBottom: 0, fontSize: '0.75rem', height: '24px', textAlign: col.align as any }} 
+                      style={{ padding: '0.2rem', marginBottom: 0, fontSize: '0.75rem', height: '24px', textAlign: col.align as CSSProperties['textAlign'] }} 
                       value={columnFilters[col.key] || ''}
                       onChange={(e) => handleColumnFilterChange(col.key, e.target.value)}
                     />
@@ -382,14 +385,14 @@ export default function ClientIngresosTable({
             </tr>
           </thead>
           <tbody>
-            {sortedRecords.length === 0 ? (
+            {paginatedRecords.length === 0 ? (
               <tr>
                 <td colSpan={16} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   No se encontraron registros.
                 </td>
               </tr>
             ) : (
-              sortedRecords.map(r => {
+              paginatedRecords.map(r => {
                 const isLocked = r.informeCaja?.status === 'DEFINITIVO';
                 return (
                   <tr 
@@ -413,8 +416,8 @@ export default function ClientIngresosTable({
                       </div>
                     </td>
 
-                    <td style={{ padding: '0.5rem', textAlign: 'center', textDecoration: r.deletedAt ? 'line-through' : 'none', whiteSpace: 'nowrap', borderRight: '1px solid var(--border-color)' }}>{formatUTC(r.depositDate)}</td>
-                    <td style={{ padding: '0.5rem', textAlign: 'center', textDecoration: r.deletedAt ? 'line-through' : 'none', whiteSpace: 'nowrap', borderRight: '1px solid var(--border-color)' }}>{formatUTC(r.concentrationDate)}</td>
+                    <td style={{ padding: '0.5rem', textAlign: 'center', textDecoration: r.deletedAt ? 'line-through' : 'none', whiteSpace: 'nowrap', borderRight: '1px solid var(--border-color)' }}>{formatDateOnly(r.depositDate)}</td>
+                    <td style={{ padding: '0.5rem', textAlign: 'center', textDecoration: r.deletedAt ? 'line-through' : 'none', whiteSpace: 'nowrap', borderRight: '1px solid var(--border-color)' }}>{formatDateOnly(r.concentrationDate)}</td>
                     <td style={{ padding: '0.5rem', textAlign: 'center', textDecoration: r.deletedAt ? 'line-through' : 'none', borderRight: '1px solid var(--border-color)' }}>${r.depositAmount.toFixed(2)}</td>
                     <td style={{ padding: '0.5rem', textAlign: 'center', textDecoration: r.deletedAt ? 'line-through' : 'none', borderRight: '1px solid var(--border-color)' }}>{r.days ?? ''}</td>
                     <td style={{ padding: '0.5rem', textAlign: 'left', textDecoration: r.deletedAt ? 'line-through' : 'none', borderRight: '1px solid var(--border-color)' }}>{getProcedencia(r)}</td>
@@ -427,7 +430,7 @@ export default function ClientIngresosTable({
                       {r.deletedAt ? (
                         <span style={{ color: 'var(--danger)' }}>ANULADO</span>
                       ) : (
-                        <span>{r.status === 'IDENTIFICADO DISTRIB' ? 'Identificado Distribuido' : r.status === 'IDENTIFICADO NO DISTRIB' ? 'Identificado No Distribuido' : r.status === 'NO IDENTIFICADO' ? 'No Identificado' : r.status}</span>
+                        <span>{statusLabel(r.status)}</span>
                       )}
                     </td>
                     <td style={{ padding: '0.5rem', textAlign: 'left', textDecoration: r.deletedAt ? 'line-through' : 'none', whiteSpace: 'nowrap', borderRight: '1px solid var(--border-color)' }}>{r.createdBy?.name || ''}</td>
@@ -457,9 +460,49 @@ export default function ClientIngresosTable({
           </tbody>
         </table>
         
-        {/* Mostrando paginacion (visual) */}
-        <div style={{ padding: '0.75rem', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-          <span>Mostrando 1 - {sortedRecords.length} de {sortedRecords.length}</span>
+        {/* Paginación real */}
+        <div style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.875rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <span>
+              Mostrando {sortedRecords.length === 0 ? 0 : (page - 1) * pageSize + 1} - {Math.min(page * pageSize, sortedRecords.length)} de {sortedRecords.length}
+            </span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>Por página:</span>
+              <select 
+                value={pageSize} 
+                onChange={e => setPageSize(Number(e.target.value))}
+                style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.2rem 0.4rem', outline: 'none' }}
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </label>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ padding: '0.3rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              <ChevronLeft size={14} /> Anterior
+            </button>
+            <span style={{ padding: '0 0.5rem' }}>
+              Página {page} de {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ padding: '0.3rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            >
+              Siguiente <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
       </div>
 

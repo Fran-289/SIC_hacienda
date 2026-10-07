@@ -5,6 +5,7 @@ import { Download, Eye, FileText, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import GenerarReportesButton from './GenerarReportesButton';
+import { apiFetch } from '@/lib/client/api';
 
 interface ReportDocument {
   id: number;
@@ -34,6 +35,8 @@ const months = [
   { id: 10, name: 'Octubre' }, { id: 11, name: 'Noviembre' }, { id: 12, name: 'Diciembre' }
 ];
 
+type FilterKey = 'correlative' | 'groupType' | 'month' | 'year' | 'status' | 'user' | 'createdAt' | 'processStatus';
+
 export default function ClientHistorial({ currentYear, minYear }: { currentYear: number, minYear: number }) {
   const [history, setHistory] = useState<ReportGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +47,7 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
 
   // --- FILTERS & SORTING STATE ---
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<Record<FilterKey, string>>({
     correlative: '',
     groupType: '',
     month: '',
@@ -63,12 +66,12 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/historial');
+      const res = await apiFetch('/api/historial');
       if (!res.ok) throw new Error('Error al obtener el historial');
       const data = await res.json();
       setHistory(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error');
     } finally {
       setLoading(false);
     }
@@ -93,7 +96,7 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
     setSortConfig({ key, direction });
   };
 
-  const handleFilterChange = (key: string, value: string) => {
+  const handleFilterChange = (key: FilterKey, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
   
@@ -119,7 +122,7 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
     formData.append('documentId', uploadingDocId.toString());
 
     try {
-      const res = await fetch('/api/reportes/upload-signed', {
+      const res = await apiFetch('/api/reportes/upload-signed', {
         method: 'POST',
         body: formData
       });
@@ -131,8 +134,8 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
 
       alert('Documento firmado subido exitosamente.');
       fetchHistory(); // Refresh to get updated urls and process status
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error');
     } finally {
       setUploadingDocId(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -160,8 +163,8 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
 
     if (sortConfig.direction !== null) {
       processed.sort((a, b) => {
-        let aVal: any = a[sortConfig.key as keyof ReportGroup];
-        let bVal: any = b[sortConfig.key as keyof ReportGroup];
+        let aVal: string | number | { name: string; email: string } | ReportDocument[] = a[sortConfig.key as keyof ReportGroup];
+        let bVal: string | number | { name: string; email: string } | ReportDocument[] = b[sortConfig.key as keyof ReportGroup];
 
         if (sortConfig.key === 'user') {
           aVal = a.createdBy.name.toLowerCase();
@@ -177,7 +180,7 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
           bVal = new Date(b.createdAt).getTime();
         } else if (typeof aVal === 'string') {
           aVal = aVal.toLowerCase();
-          bVal = bVal.toLowerCase();
+          bVal = (bVal as string).toLowerCase();
         }
 
         if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -193,7 +196,7 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
     return sortConfig.direction === 'asc' ? <ArrowUp size={14} style={{ color: 'var(--accent-primary)', marginLeft: '0.25rem' }} /> : <ArrowDown size={14} style={{ color: 'var(--accent-primary)', marginLeft: '0.25rem' }} />;
   };
 
-  const columns = [
+  const columns: { key: FilterKey; label: string; minWidth: string; align: React.CSSProperties['textAlign'] }[] = [
     { key: 'correlative', label: 'Correlativo', minWidth: '60px', align: 'left' },
     { key: 'groupType', label: 'Tipo de Reporte', minWidth: '160px', align: 'left' },
     { key: 'month', label: 'Mes', minWidth: '100px', align: 'left' },
@@ -235,7 +238,7 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
               <tr style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)', textTransform: 'uppercase' }}>
                 <th style={{ width: '40px', padding: '0.5rem', borderRight: '1px solid var(--border-color)' }}></th>
                 {columns.map((col, idx) => (
-                  <th key={col.key} style={{ padding: '0.5rem', fontWeight: 600, minWidth: col.minWidth, borderRight: '1px solid var(--border-color)', textAlign: col.align as any }}>
+                  <th key={col.key} style={{ padding: '0.5rem', fontWeight: 600, minWidth: col.minWidth, borderRight: '1px solid var(--border-color)', textAlign: col.align }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none', fontSize: '0.75rem' }} onClick={() => handleSort(col.key)}>
                         {col.label}
@@ -245,7 +248,7 @@ export default function ClientHistorial({ currentYear, minYear }: { currentYear:
                         type="text" 
                         className="input-control" 
                         style={{ padding: '0.2rem', marginBottom: 0, fontSize: '0.75rem', height: '24px' }} 
-                        value={(filters as any)[col.key] || ''}
+                        value={filters[col.key] || ''}
                         onChange={(e) => handleFilterChange(col.key, e.target.value)}
                         placeholder=""
                       />

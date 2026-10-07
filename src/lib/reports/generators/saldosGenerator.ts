@@ -1,9 +1,12 @@
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { type CellHookData } from 'jspdf-autotable';
 import { getMonthNameSpanish, formatCurrency, getMetadataString } from '../utils';
 import ExcelJS from 'exceljs';
+import type { Record as DbRecord } from '@prisma/client';
 
-export async function generateSaldosPDF(records: any[], saldoAnteriorRoute: number, month: number, year: number, settings: Record<string, string> = {}) {
+type DocWithAutoTable = jsPDF & { lastAutoTable: { finalY: number } };
+
+export async function generateSaldosPDF(records: DbRecord[], saldoAnteriorRoute: number, month: number, year: number, settings: Record<string, string> = {}) {
   const doc = new jsPDF({ orientation: 'portrait' });
   const pageWidth = doc.internal.pageSize.width;
   const margin = 14;
@@ -28,8 +31,9 @@ export async function generateSaldosPDF(records: any[], saldoAnteriorRoute: numb
   let totalConcentracion = 0;
 
   records.forEach(r => {
-    const dMonth = new Date(r.depositDate).getMonth() + 1;
-    const dYear = new Date(r.depositDate).getFullYear();
+    const d = new Date(r.depositDate);
+    const dMonth = d.getUTCMonth() + 1;
+    const dYear = d.getUTCFullYear();
     
     if (dMonth === month && dYear === year) {
       totalPasaportes += r.passportValue;
@@ -38,8 +42,9 @@ export async function generateSaldosPDF(records: any[], saldoAnteriorRoute: numb
       
       let isNextMonth = false;
       if (r.concentrationDate) {
-        const cMonth = new Date(r.concentrationDate).getMonth() + 1;
-        const cYear = new Date(r.concentrationDate).getFullYear();
+        const c = new Date(r.concentrationDate);
+        const cMonth = c.getUTCMonth() + 1;
+        const cYear = c.getUTCFullYear();
         if ((month === 12 && cMonth === 1 && cYear === year + 1) || (month < 12 && cMonth === month + 1 && cYear === year)) {
           isNextMonth = true;
         }
@@ -52,8 +57,9 @@ export async function generateSaldosPDF(records: any[], saldoAnteriorRoute: numb
     }
 
     if (r.concentrationDate) {
-      const cMonth = new Date(r.concentrationDate).getMonth() + 1;
-      const cYear = new Date(r.concentrationDate).getFullYear();
+      const c = new Date(r.concentrationDate);
+      const cMonth = c.getUTCMonth() + 1;
+      const cYear = c.getUTCFullYear();
       if (cMonth === month && cYear === year) {
         totalConcentracion += r.depositAmount;
       }
@@ -110,7 +116,7 @@ export async function generateSaldosPDF(records: any[], saldoAnteriorRoute: numb
       2: { cellWidth: 35, halign: 'right' },
       3: { cellWidth: 35, halign: 'right' },
     },
-    didParseCell: (data: any) => {
+    didParseCell: (data: CellHookData) => {
       // Remove horizontal lines for the CONCEPTO column (index 0) in the body except for the borders with header and footer.
       // row 0: top border but no bottom border
       // row 1: no top or bottom border
@@ -127,7 +133,7 @@ export async function generateSaldosPDF(records: any[], saldoAnteriorRoute: numb
     }
   });
 
-  let finalY = (doc as any).lastAutoTable.finalY || 100;
+  let finalY = (doc as DocWithAutoTable).lastAutoTable.finalY || 100;
 
   if (finalY + 40 > doc.internal.pageSize.height) {
     doc.addPage();
@@ -154,7 +160,7 @@ export async function generateSaldosPDF(records: any[], saldoAnteriorRoute: numb
   return { blob, filename: `Control_Saldos_${month}_${year}.pdf`, signatureY };
 }
 
-export async function generateSaldosExcel(records: any[], saldoAnteriorParam: number, month: number, year: number, settings: Record<string, string> = {}) {
+export async function generateSaldosExcel(records: DbRecord[], saldoAnteriorParam: number, month: number, year: number, settings: Record<string, string> = {}) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Saldos');
 
@@ -206,8 +212,9 @@ export async function generateSaldosExcel(records: any[], saldoAnteriorParam: nu
   let totalConcentracion = 0;
 
   records.forEach(r => {
-    const dMonth = new Date(r.depositDate).getMonth() + 1;
-    const dYear = new Date(r.depositDate).getFullYear();
+    const d = new Date(r.depositDate);
+    const dMonth = d.getUTCMonth() + 1;
+    const dYear = d.getUTCFullYear();
     
     if (dMonth === month && dYear === year) {
       totalPasaportes += r.passportValue;
@@ -216,8 +223,9 @@ export async function generateSaldosExcel(records: any[], saldoAnteriorParam: nu
       
       let isNextMonth = false;
       if (r.concentrationDate) {
-        const cMonth = new Date(r.concentrationDate).getMonth() + 1;
-        const cYear = new Date(r.concentrationDate).getFullYear();
+        const c = new Date(r.concentrationDate);
+        const cMonth = c.getUTCMonth() + 1;
+        const cYear = c.getUTCFullYear();
         if ((month === 12 && cMonth === 1 && cYear === year + 1) || (month < 12 && cMonth === month + 1 && cYear === year)) {
           isNextMonth = true;
         }
@@ -230,8 +238,9 @@ export async function generateSaldosExcel(records: any[], saldoAnteriorParam: nu
     }
 
     if (r.concentrationDate) {
-      const cMonth = new Date(r.concentrationDate).getMonth() + 1;
-      const cYear = new Date(r.concentrationDate).getFullYear();
+      const c = new Date(r.concentrationDate);
+      const cMonth = c.getUTCMonth() + 1;
+      const cYear = c.getUTCFullYear();
       if (cMonth === month && cYear === year) {
         totalConcentracion += r.depositAmount;
       }

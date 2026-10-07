@@ -1,8 +1,26 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { format } from 'date-fns';
+import { formatDateOnly } from '@/lib/utils/dateUtils';
+import { statusLabel } from '@/lib/utils/status';
 
-export async function exportRecordsToExcel(records: any[], filename: string) {
+type ExportableRecord = {
+  id: number;
+  depositDate: Date | string;
+  depositAmount: number;
+  concentrationDate: Date | string | null;
+  days: number | null;
+  region: string | null;
+  country: string | null;
+  location: string | null;
+  passportValue: number;
+  duiValue: number;
+  consularValue: number;
+  commissionValue: number;
+  status: string;
+  createdBy?: { name: string | null } | null;
+};
+
+export async function exportRecordsToExcel(records: ExportableRecord[], filename: string) {
   if (!records || records.length === 0) return;
 
   const workbook = new ExcelJS.Workbook();
@@ -57,16 +75,16 @@ export async function exportRecordsToExcel(records: any[], filename: string) {
 
     const rowData = [
       r.id,
-      format(new Date(r.depositDate), 'dd/MM/yyyy'),
+      formatDateOnly(r.depositDate),
       r.depositAmount || 0,
-      r.concentrationDate ? format(new Date(r.concentrationDate), 'dd/MM/yyyy') : '-',
+      formatDateOnly(r.concentrationDate),
       r.days ?? '-',
       procedencia,
       r.passportValue || 0,
       r.duiValue || 0,
       r.consularValue || 0,
       r.commissionValue || 0,
-      r.status,
+      statusLabel(r.status),
       r.createdBy?.name || '-',
     ];
 
@@ -76,7 +94,7 @@ export async function exportRecordsToExcel(records: any[], filename: string) {
       cell.value = val;
       cell.font = { size: 8 };
       
-      let alignment: Partial<ExcelJS.Alignment> = { vertical: 'middle', horizontal: 'left' };
+      const alignment: Partial<ExcelJS.Alignment> = { vertical: 'middle', horizontal: 'left' };
       if (i === 0 || i === 1 || i === 3 || i === 4) alignment.horizontal = 'center'; // ID, Fechas, Dias
       if (i === 2 || i === 6 || i === 7 || i === 8 || i === 9) alignment.horizontal = 'right'; // Montos
 
@@ -114,7 +132,7 @@ export async function exportRecordsToExcel(records: any[], filename: string) {
   saveAs(blob, `${filename}.xlsx`);
 }
 
-export async function exportSingleRecordToExcel(record: any, filename: string) {
+export async function exportSingleRecordToExcel(record: ExportableRecord, filename: string) {
   if (!record) return;
   await exportRecordsToExcel([record], filename);
 }

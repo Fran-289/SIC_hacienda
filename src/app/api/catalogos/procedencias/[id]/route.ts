@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAdminAuthz } from '@/lib/authz';
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
-  if (session.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Prohibido' }, { status: 403 });
-  }
+  const auth = await requireAdminAuthz();
+  if (!auth.ok) return auth.response;
+  const session = auth.user;
 
   try {
     const { id: idStr } = await params;
@@ -16,26 +13,29 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const body = await request.json();
     const { type, region, country, location, address, status, createdAt } = body;
 
-    const consulate = await prisma.consulate.update({
-      where: { id },
-      data: { 
-        type, 
-        region, 
-        country, 
-        location, 
-        address: address || null, 
-        status,
-        ...(createdAt && { createdAt: new Date(createdAt) })
-      }
-    });
+    const consulate = await prisma.$transaction(async (tx) => {
+      const updated = await tx.consulate.update({
+        where: { id },
+        data: { 
+          type, 
+          region, 
+          country, 
+          location, 
+          address: address || null, 
+          status,
+          ...(createdAt && { createdAt: new Date(createdAt) })
+        }
+      });
 
-    // Registrar en logs
-    await prisma.systemLog.create({
-      data: {
-        userId: session.id as number,
-        action: 'UPDATE_CONSULATE',
-        details: `Actualizó la procedencia ID: ${id}`,
-      }
+      await tx.systemLog.create({
+        data: {
+          userId: session.id,
+          action: 'UPDATE_CONSULATE',
+          details: `Actualizó la procedencia ID: ${id}`,
+        }
+      });
+
+      return updated;
     });
 
     return NextResponse.json(consulate);

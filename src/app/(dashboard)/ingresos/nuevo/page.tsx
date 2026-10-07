@@ -4,24 +4,31 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, X, Building2, Calendar, DollarSign, ArrowLeft, Clock, CheckCircle, Wallet } from 'lucide-react';
 import Link from 'next/link';
-import { calculateBusinessDays } from '@/lib/utils/dateUtils';
+import { calculateBusinessDays, todayLocalISO } from '@/lib/utils/dateUtils';
+import { RECORD_STATUSES, STATUS_LABELS } from '@/lib/utils/status';
+import { apiFetch } from '@/lib/client/api';
 
 type Consulate = { id: number; type: string; region: string; country: string; location: string; address: string | null };
+
+type ProfileUser = {
+  id?: number;
+  name?: string | null;
+  email?: string | null;
+  avatar?: string | null;
+};
+
+const Asterisk = () => <span style={{ color: 'red', cursor: 'help', marginLeft: '0.25rem' }} title="Campo obligatorio">*</span>;
 
 export default function NuevoIngresoPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const estados = [
-    'No identificado',
-    'Identificado no distribuido',
-    'Identificado distribuido',
-  ];
+  const estados = RECORD_STATUSES;
 
   const [formData, setFormData] = useState({
-    status: estados[0],
-    depositDate: new Date().toISOString().split('T')[0],
+    status: RECORD_STATUSES[0] as string,
+    depositDate: todayLocalISO(),
     depositAmount: '',
     concentrationDate: '',
     concentrationDays: '',
@@ -37,16 +44,16 @@ export default function NuevoIngresoPage() {
 
   const [consulates, setConsulates] = useState<Consulate[]>([]);
   const [isCountryOpen, setIsCountryOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<ProfileUser | null>(null);
 
   useEffect(() => {
-    fetch('/api/users/profile')
+    apiFetch('/api/users/profile')
       .then(res => res.json())
       .then(data => {
         if (data.user) setCurrentUser(data.user);
       })
       .catch(console.error);
-    fetch('/api/catalogos/procedencias')
+    apiFetch('/api/catalogos/procedencias')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setConsulates(data);
@@ -99,7 +106,7 @@ export default function NuevoIngresoPage() {
       setLoading(false);
       return;
     }
-    if (formData.status !== 'No identificado' && !formData.procedenciaId) {
+    if (formData.status !== 'NO IDENTIFICADO' && !formData.procedenciaId) {
       setError('El campo Procedencia es obligatorio para este estado.');
       setLoading(false);
       return;
@@ -113,7 +120,7 @@ export default function NuevoIngresoPage() {
     const days = parseInt(formData.concentrationDays) || 0;
 
     let region = null, country = null, location = null;
-    if (formData.status !== 'No identificado' && formData.procedenciaId) {
+    if (formData.status !== 'NO IDENTIFICADO' && formData.procedenciaId) {
       const selected = consulates.find(c => c.id === parseInt(formData.procedenciaId));
       if (selected) {
         region = selected.region;
@@ -123,7 +130,7 @@ export default function NuevoIngresoPage() {
     }
 
     try {
-      const res = await fetch('/api/ingresos', {
+      const res = await apiFetch('/api/ingresos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -135,11 +142,11 @@ export default function NuevoIngresoPage() {
           region,
           country,
           location,
-          passportValue: formData.status === 'Identificado distribuido' ? passport : 0,
-          duiValue: formData.status === 'Identificado distribuido' ? dui : 0,
-          consularValue: formData.status === 'Identificado distribuido' ? consular : 0,
+          passportValue: formData.status === 'IDENTIFICADO DISTRIBUIDO' ? passport : 0,
+          duiValue: formData.status === 'IDENTIFICADO DISTRIBUIDO' ? dui : 0,
+          consularValue: formData.status === 'IDENTIFICADO DISTRIBUIDO' ? consular : 0,
           diversosValue: 0,
-          commissionValue: formData.status === 'Identificado distribuido' ? commission : 0,
+          commissionValue: formData.status === 'IDENTIFICADO DISTRIBUIDO' ? commission : 0,
         }),
       });
 
@@ -168,8 +175,6 @@ export default function NuevoIngresoPage() {
     if (formData.procedenciaCountrySearch) list = list.filter(c => c.country === formData.procedenciaCountrySearch);
     return list;
   }, [consulates, formData.procedenciaRegion, formData.procedenciaCountrySearch]);
-
-  const Asterisk = () => <span style={{ color: 'red', cursor: 'help', marginLeft: '0.25rem' }} title="Campo obligatorio">*</span>;
 
   return (
     <div className="animate-fade-in" style={{ maxWidth: '800px', margin: '0 auto', width: '100%' }}>
@@ -226,7 +231,7 @@ export default function NuevoIngresoPage() {
                   onChange={(e) => setFormData({...formData, status: e.target.value})}
                 >
                   {estados.map((e, idx) => (
-                    <option key={idx} value={e} style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-primary)' }}>{e}</option>
+                    <option key={idx} value={e} style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-primary)' }}>{STATUS_LABELS[e]}</option>
                   ))}
                 </select>
               </div>
@@ -309,7 +314,7 @@ export default function NuevoIngresoPage() {
               </div>
             </fieldset>
 
-            {formData.status !== 'No identificado' && (
+            {formData.status !== 'NO IDENTIFICADO' && (
               <fieldset style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.25rem 0.75rem 0.5rem', margin: 0 }}>
                 <legend style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', padding: '0 0.25rem', fontWeight: 500 }}>Procedencia:<Asterisk /></legend>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
@@ -399,7 +404,7 @@ export default function NuevoIngresoPage() {
               </fieldset>
             )}
 
-            {formData.status === 'Identificado distribuido' && (
+            {formData.status === 'IDENTIFICADO DISTRIBUIDO' && (
               <>
                 <fieldset style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.25rem 0.75rem 0.5rem', margin: 0 }}>
                   <legend style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', padding: '0 0.25rem', fontWeight: 500 }}>Total Ingresos:</legend>

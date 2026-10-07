@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAuthz } from '@/lib/authz';
 
 const STATE_FLOW = [
   'Firma Jefatura',
@@ -11,15 +11,13 @@ const STATE_FLOW = [
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
+    const auth = await requireAuthz('reportes');
+    if (!auth.ok) return auth.response;
 
     const body = await req.json();
     const { groupId } = body;
 
-    if (!groupId) {
+    if (typeof groupId !== 'number' || !Number.isInteger(groupId) || groupId <= 0) {
       return NextResponse.json({ error: 'ID de grupo no proporcionado' }, { status: 400 });
     }
 

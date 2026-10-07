@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAuthz, requireAdminAuthz } from '@/lib/authz';
 
 export async function GET() {
   try {
+    const auth = await requireAuthz(null);
+    if (!auth.ok) return auth.response;
+
     const settings = await prisma.systemSetting.findMany();
     const config = settings.reduce((acc, s) => {
       acc[s.key] = s.value;
@@ -19,10 +22,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
+    const auth = await requireAdminAuthz();
+    if (!auth.ok) return auth.response;
 
     const data = await req.json();
     const { settings } = data; // { key1: val1, key2: val2 }

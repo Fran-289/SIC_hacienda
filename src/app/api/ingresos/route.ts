@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { requireAuthz } from '@/lib/authz';
+import { RECORD_STATUSES } from '@/lib/utils/status';
 import { z } from 'zod';
 
 const recordSchema = z.object({
@@ -16,59 +17,59 @@ const recordSchema = z.object({
   consularValue: z.number().min(0),
   commissionValue: z.number().min(0),
   diversosValue: z.number().min(0).optional().default(0),
-  status: z.string(),
+  status: z.enum(RECORD_STATUSES),
 });
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const auth = await requireAuthz('ingresos');
+  if (!auth.ok) return auth.response;
+  const session = auth.user;
   try {
     const body = await request.json();
     const result = recordSchema.safeParse(body);
-    
+
     if (!result.success) {
-      try { console.log('ZOD ERROR: ' + JSON.stringify((result.error as any).errors)); } catch(e){}
-      return NextResponse.json({ error: 'Datos inválidos', details: (result.error as any).errors }, { status: 400 });
+      return NextResponse.json({ error: 'Datos inválidos', details: result.error.issues }, { status: 400 });
     }
 
     const data = result.data;
 
-    const record = await prisma.record.create({
-      data: {
-        depositDate: new Date(data.depositDate),
-        depositAmount: data.depositAmount,
-        concentrationDate: data.concentrationDate ? new Date(data.concentrationDate) : null,
-        days: data.days,
-        region: data.region,
-        country: data.country,
-        location: data.location,
-        passportValue: data.passportValue,
-        duiValue: data.duiValue,
-        consularValue: data.consularValue,
-        commissionValue: data.commissionValue,
-        diversosValue: data.diversosValue,
-        status: data.status,
-        createdById: session ? session.id as number : null,
-        updatedById: session ? session.id as number : null,
-      }
-    });
-
-    if (session) {
-      await prisma.systemLog.create({
+    const record = await prisma.$transaction(async (tx) => {
+      const created = await tx.record.create({
         data: {
-          userId: session.id as number,
-          userName: session.name as string,
-          action: 'CREATE_RECORD',
-          details: `Registró ingreso en la bandeja. ID: ${record.id}`,
+          depositDate: new Date(data.depositDate),
+          depositAmount: data.depositAmount,
+          concentrationDate: data.concentrationDate ? new Date(data.concentrationDate) : null,
+          days: data.days,
+          region: data.region,
+          country: data.country,
+          location: data.location,
+          passportValue: data.passportValue,
+          duiValue: data.duiValue,
+          consularValue: data.consularValue,
+          commissionValue: data.commissionValue,
+          diversosValue: data.diversosValue,
+          status: data.status,
+          createdById: session.id,
+          updatedById: session.id,
         }
       });
-    }
+
+      await tx.systemLog.create({
+        data: {
+          userId: session.id,
+          userName: session.name,
+          action: 'CREATE_RECORD',
+          details: `Registró ingreso en la bandeja. ID: ${created.id}`,
+        }
+      });
+
+      return created;
+    });
 
     return NextResponse.json({ success: true, record });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating record:', error);
-    try {
-      require('fs').writeFileSync('./last_error.txt', String(error.message || error) + "\\n" + (error.stack || ""));
-    } catch(e) {}
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
   }
 }

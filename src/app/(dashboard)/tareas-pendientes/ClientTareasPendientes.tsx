@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Download, Eye, FileText, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, PenTool, Upload, Mail } from 'lucide-react';
+import { Download, Eye, FileText, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, PenTool, Upload, Mail, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { apiFetch } from '@/lib/client/api';
 
 interface ReportDocument {
   id: number;
@@ -33,6 +34,8 @@ const months = [
   { id: 10, name: 'Octubre' }, { id: 11, name: 'Noviembre' }, { id: 12, name: 'Diciembre' }
 ];
 
+type FilterKey = 'correlative' | 'groupType' | 'month' | 'year' | 'status' | 'user' | 'createdAt' | 'processStatus';
+
 export default function ClientTareasPendientes({ currentYear, minYear }: { currentYear: number, minYear: number }) {
   const [history, setHistory] = useState<ReportGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,9 +45,10 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
   const [isSigning, setIsSigning] = useState<number | null>(null);
+  const [sendingReport, setSendingReport] = useState(false);
 
   // --- FILTERS & SORTING STATE ---
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<Record<FilterKey, string>>({
     correlative: '',
     groupType: '',
     month: '',
@@ -63,12 +67,12 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/historial');
+      const res = await apiFetch('/api/historial');
       if (!res.ok) throw new Error('Error al obtener el historial');
       const data = await res.json();
       setHistory(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error');
     } finally {
       setLoading(false);
     }
@@ -111,13 +115,13 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
     setSortConfig({ key, direction });
   };
 
-  const handleFilterChange = (key: string, value: string) => {
+  const handleFilterChange = (key: FilterKey, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
   
   const advanceProcess = async (groupId: number) => {
     try {
-      const res = await fetch('/api/reportes/avanzar-proceso', {
+      const res = await apiFetch('/api/reportes/avanzar-proceso', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ groupId })
@@ -137,7 +141,7 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
     if (confirm('¿Seguro quieres aplicar tu firma digital en este documento?')) {
       setIsSigning(docId);
       try {
-        const res = await fetch('/api/documentos/firmar', {
+        const res = await apiFetch('/api/documentos/firmar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ documentId: docId })
@@ -174,7 +178,7 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
     formData.append('documentId', uploadingDocId.toString());
 
     try {
-      const res = await fetch('/api/reportes/upload-signed', {
+      const res = await apiFetch('/api/reportes/upload-signed', {
         method: 'POST',
         body: formData
       });
@@ -186,11 +190,29 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
 
       alert('Documento firmado subido exitosamente.');
       fetchHistory(); // Refresh to get updated urls and process status
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error');
     } finally {
       setUploadingDocId(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSendReportEmail = async (group: ReportGroup) => {
+    if (!confirm('¿Enviar el reporte por correo a RREE y Banco Cuscatlán desde el servidor?')) return;
+    setSendingReport(true);
+    try {
+      const res = await apiFetch('/api/notificaciones/reporte', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipoReporte: 'noidentificados', mes: group.periodMonth, anio: group.periodYear })
+      });
+      const data = await res.json().catch(() => ({}));
+      alert(res.ok ? data.message || 'Correo enviado.' : data.error || 'No se pudo enviar el correo.');
+    } catch {
+      alert('Error de conexión');
+    } finally {
+      setSendingReport(false);
     }
   };
 
@@ -215,8 +237,8 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
 
     if (sortConfig.direction !== null) {
       processed.sort((a, b) => {
-        let aVal: any = a[sortConfig.key as keyof ReportGroup];
-        let bVal: any = b[sortConfig.key as keyof ReportGroup];
+        let aVal: string | number | { name: string; email: string } | ReportDocument[] = a[sortConfig.key as keyof ReportGroup];
+        let bVal: string | number | { name: string; email: string } | ReportDocument[] = b[sortConfig.key as keyof ReportGroup];
 
         if (sortConfig.key === 'user') {
           aVal = a.createdBy.name.toLowerCase();
@@ -232,7 +254,7 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
           bVal = new Date(b.createdAt).getTime();
         } else if (typeof aVal === 'string') {
           aVal = aVal.toLowerCase();
-          bVal = bVal.toLowerCase();
+          bVal = (bVal as string).toLowerCase();
         }
 
         if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -248,7 +270,7 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
     return sortConfig.direction === 'asc' ? <ArrowUp size={14} style={{ color: 'var(--accent-primary)', marginLeft: '0.25rem' }} /> : <ArrowDown size={14} style={{ color: 'var(--accent-primary)', marginLeft: '0.25rem' }} />;
   };
 
-  const columns = [
+  const columns: { key: FilterKey; label: string; minWidth: string; align: React.CSSProperties['textAlign'] }[] = [
     { key: 'correlative', label: 'Correlativo', minWidth: '60px', align: 'left' },
     { key: 'groupType', label: 'Tipo de Reporte', minWidth: '160px', align: 'left' },
     { key: 'month', label: 'Mes', minWidth: '100px', align: 'left' },
@@ -289,7 +311,7 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
               <tr style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)', textTransform: 'uppercase' }}>
                 <th style={{ width: '40px', padding: '0.5rem', borderRight: '1px solid var(--border-color)' }}></th>
                 {columns.map((col, idx) => (
-                  <th key={col.key} style={{ padding: '0.5rem', fontWeight: 600, minWidth: col.minWidth, borderRight: '1px solid var(--border-color)', textAlign: col.align as any }}>
+                  <th key={col.key} style={{ padding: '0.5rem', fontWeight: 600, minWidth: col.minWidth, borderRight: '1px solid var(--border-color)', textAlign: col.align }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none', fontSize: '0.75rem' }} onClick={() => handleSort(col.key)}>
                         {col.label}
@@ -299,7 +321,7 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
                         type="text" 
                         className="input-control" 
                         style={{ padding: '0.2rem', marginBottom: 0, fontSize: '0.75rem', height: '24px' }} 
-                        value={(filters as any)[col.key] || ''}
+                        value={filters[col.key] || ''}
                         onChange={(e) => handleFilterChange(col.key, e.target.value)}
                         placeholder=""
                       />
@@ -394,7 +416,7 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
                       
                       {isExpanded && (
                         <tr>
-                          <td colSpan={8} style={{ padding: 0, borderBottom: '1px solid var(--border-color)' }}>
+                          <td colSpan={9} style={{ padding: 0, borderBottom: '1px solid var(--border-color)' }}>
                             <div style={{ padding: '1rem', backgroundColor: 'rgba(0,0,0,0.02)' }}>
                               <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'var(--bg-primary)', borderRadius: '6px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
                                 <thead>
@@ -455,6 +477,15 @@ export default function ClientTareasPendientes({ currentYear, minYear }: { curre
 
                                           {doc.reportType === 'noidentificados_nodistribuidos' && (
                                             <>
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); handleSendReportEmail(group); }}
+                                                title="Enviar por correo desde el servidor"
+                                                className="btn btn-primary"
+                                                style={{ padding: '0.4rem', border: '1px solid #10b981', color: '#10b981' }}
+                                                disabled={sendingReport}
+                                              >
+                                                <Send size={16} />
+                                              </button>
                                               <a href={getMailtoBanco(group)} title="Enviar a Banco Cuscatlán" onClick={e => { e.stopPropagation(); alert('Recuerda adjuntar el archivo PDF en tu correo antes de enviarlo.'); }} className="btn btn-secondary" style={{ padding: '0.4rem', border: '1px solid #8b5cf6', color: '#8b5cf6' }}>
                                                 <Mail size={16} />
                                               </a>

@@ -5,7 +5,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, FileText, Settings, Database, User, Menu, ChevronLeft, ChevronRight, History, ClipboardList } from 'lucide-react';
 
-export default function ClientSidebar({ isAdmin, dbUser }: { isAdmin: boolean, dbUser: any }) {
+interface SidebarUser {
+  name?: string;
+  email?: string;
+  avatar?: string | null;
+  permissions?: string | null;
+}
+
+export default function ClientSidebar({ isAdmin, dbUser }: { isAdmin: boolean, dbUser: SidebarUser | null }) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
 

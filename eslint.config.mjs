@@ -13,6 +13,15 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // Patrones legítimos en esta base de código:
+    //  - guardas de hidratación (setMounted(true) en useEffect)
+    //  - inicio de carga de datos (setLoading(true) antes del primer await)
+    // Se dejan como aviso para no ocultarlos, pero no bloquean `npm run lint`.
+    rules: {
+      "react-hooks/set-state-in-effect": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;

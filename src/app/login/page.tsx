@@ -163,13 +163,13 @@ export default function LoginPage() {
           {/* Legal Text (Right) */}
           <div style={{ flex: '1.2', minWidth: '350px', color: '#1e3a8a', fontSize: '1.05rem', lineHeight: '1.6', textAlign: 'justify' }}>
             <p style={{ marginBottom: '1.25rem', marginTop: 0 }}>
-              "La información que contiene este sistema está sujeta a los criterios de CONFIDENCIALIDAD establecidos en la Ley de Acceso a la Información Pública y su uso está condicionado a la autorización que regulan las normas legales y técnicas aplicables.
+              &quot;La información que contiene este sistema está sujeta a los criterios de CONFIDENCIALIDAD establecidos en la Ley de Acceso a la Información Pública y su uso está condicionado a la autorización que regulan las normas legales y técnicas aplicables.
             </p>
             <p style={{ marginBottom: '1.25rem' }}>
               Las actividades que se realizan dentro del sistema son registradas y monitoreadas.
             </p>
             <p style={{ margin: 0 }}>
-              Cualquier acción indebida en el uso de la información, relativa a su generación, distribución y/o difusión parcial o total para fines no autorizados, queda sujeta a las sanciones legales correspondientes."
+              Cualquier acción indebida en el uso de la información, relativa a su generación, distribución y/o difusión parcial o total para fines no autorizados, queda sujeta a las sanciones legales correspondientes.&quot;
             </p>
           </div>
 

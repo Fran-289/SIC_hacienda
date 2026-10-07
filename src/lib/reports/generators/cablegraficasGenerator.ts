@@ -1,10 +1,14 @@
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { type RowInput } from 'jspdf-autotable';
 import { format, differenceInDays } from 'date-fns';
 import { getMonthNameSpanish, formatCurrency } from '../utils';
+import { formatDateOnly } from '@/lib/utils/dateUtils';
 import ExcelJS from 'exceljs';
+import type { Record as DbRecord } from '@prisma/client';
 
-export async function generateCablegraficasPDF(records: any[], month: number, year: number, settings: Record<string, string> = {}) {
+type DocWithAutoTable = jsPDF & { lastAutoTable: { finalY: number } };
+
+export async function generateCablegraficasPDF(records: DbRecord[], month: number, year: number, settings: Record<string, string> = {}) {
   const doc = new jsPDF({ orientation: 'landscape' }); // Need landscape for many columns
   const pageWidth = doc.internal.pageSize.width;
   const margin = 14;
@@ -25,9 +29,9 @@ export async function generateCablegraficasPDF(records: any[], month: number, ye
   doc.text(`FECHA ELABORACIÓN: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, pageWidth - margin, 35, { align: 'right' });
 
   // Separate records into the 3 sections
-  const sec1Records: any[] = []; // prev month dep, curr month conc
-  const sec2Records: any[] = []; // curr month dep, curr month conc
-  const sec3Records: any[] = []; // curr month dep, next month conc or null
+  const sec1Records: DbRecord[] = []; // prev month dep, curr month conc
+  const sec2Records: DbRecord[] = []; // curr month dep, curr month conc
+  const sec3Records: DbRecord[] = []; // curr month dep, next month conc or null
 
   records.forEach(r => {
     const dMonth = new Date(r.depositDate).getMonth() + 1;
@@ -51,14 +55,14 @@ export async function generateCablegraficasPDF(records: any[], month: number, ye
 
   const columns = ['REGION', 'PROCEDENCIA', 'FECHA DEPÓSITO', 'FECHA CONCENTRA', 'DIAS', 'TOTAL INGRESOS', 'COMISIÓN', 'VALOR DEPOSITO', 'PASAPORTE', 'DUI', 'CONSULARES'];
 
-  const buildSection = (title: string, data: any[]) => {
-    const rows: any[] = [];
+  const buildSection = (title: string, data: DbRecord[]) => {
+    const rows: RowInput[] = [];
     if (data.length === 0) return { rows, gTotalIngresos: 0, gTotalComision: 0, gTotalDep: 0, gPasa: 0, gDui: 0, gCons: 0 };
 
     rows.push([{ content: title, colSpan: columns.length, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } }]);
 
     // Group by state
-    const byState: Record<string, any[]> = {};
+    const byState: Record<string, DbRecord[]> = {};
     data.forEach(r => {
       const state = r.country || r.region || 'SIN ESTADO';
       if (!byState[state]) byState[state] = [];
@@ -88,8 +92,8 @@ export async function generateCablegraficasPDF(records: any[], month: number, ye
         rows.push([
           idx === 0 ? state : '',
           r.location || 'NO IDENTIFICADO',
-          format(new Date(r.depositDate), 'dd/MM/yyyy'),
-          r.concentrationDate ? format(new Date(r.concentrationDate), 'dd/MM/yyyy') : '-',
+          formatDateOnly(r.depositDate),
+          formatDateOnly(r.concentrationDate),
           diffDays,
           formatCurrency(tIngresos),
           formatCurrency(r.commissionValue),
@@ -122,7 +126,7 @@ export async function generateCablegraficasPDF(records: any[], month: number, ye
     return { rows, gTotalIngresos, gTotalComision, gTotalDep, gPasa, gDui, gCons };
   };
 
-  const bodyData: any[] = [];
+  const bodyData: RowInput[] = [];
   
   let grandTotalIngresos = 0, grandTotalComision = 0, grandTotalDep = 0, grandPasa = 0, grandDui = 0, grandCons = 0;
 
@@ -202,7 +206,7 @@ export async function generateCablegraficasPDF(records: any[], month: number, ye
     }
   });
 
-  let finalY = (doc as any).lastAutoTable.finalY + 15;
+  let finalY = (doc as DocWithAutoTable).lastAutoTable.finalY + 15;
   
   if (finalY + 40 > doc.internal.pageSize.height) {
     doc.addPage();
@@ -229,7 +233,7 @@ export async function generateCablegraficasPDF(records: any[], month: number, ye
   return { blob, filename: `Cablegraficas_${month}_${year}.pdf`, signatureY };
 }
 
-export async function generateCablegraficasExcel(records: any[], month: number, year: number, settings: Record<string, string> = {}) {
+export async function generateCablegraficasExcel(records: DbRecord[], month: number, year: number, settings: Record<string, string> = {}) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Cablegraficas');
 
@@ -280,9 +284,9 @@ export async function generateCablegraficasExcel(records: any[], month: number, 
   });
 
   // Data processing exactly like PDF
-  const sec1Records: any[] = [];
-  const sec2Records: any[] = [];
-  const sec3Records: any[] = [];
+  const sec1Records: DbRecord[] = [];
+  const sec2Records: DbRecord[] = [];
+  const sec3Records: DbRecord[] = [];
 
   records.forEach(r => {
     const dMonth = new Date(r.depositDate).getMonth() + 1;
@@ -300,7 +304,7 @@ export async function generateCablegraficasExcel(records: any[], month: number, 
     else if (isCurrDep && isNextConc) sec3Records.push(r);
   });
 
-  const buildSection = (title: string, data: any[]) => {
+  const buildSection = (title: string, data: DbRecord[]) => {
     if (data.length === 0) return { gTotalIngresos: 0, gTotalComision: 0, gTotalDep: 0, gPasa: 0, gDui: 0, gCons: 0, gDiv: 0 };
 
     const titleRow = worksheet.addRow([title]);
@@ -309,7 +313,7 @@ export async function generateCablegraficasExcel(records: any[], month: number, 
     titleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F0F0' } };
     titleRow.getCell(1).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
 
-    const byState: Record<string, any[]> = {};
+    const byState: Record<string, DbRecord[]> = {};
     data.forEach(r => {
       const state = r.country || r.region || 'SIN ESTADO';
       if (!byState[state]) byState[state] = [];
@@ -338,8 +342,8 @@ export async function generateCablegraficasExcel(records: any[], month: number, 
         const row = worksheet.addRow([
           idx === 0 ? state : '',
           r.location || 'NO IDENTIFICADO',
-          format(new Date(r.depositDate), 'dd/MM/yyyy'),
-          r.concentrationDate ? format(new Date(r.concentrationDate), 'dd/MM/yyyy') : '-',
+          formatDateOnly(r.depositDate),
+          formatDateOnly(r.concentrationDate),
           diffDays,
           tIngresos,
           r.commissionValue,

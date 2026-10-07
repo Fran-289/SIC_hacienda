@@ -1,5 +1,6 @@
-import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getPageUser } from '@/lib/authz';
+import { redirect } from 'next/navigation';
 import { Settings } from 'lucide-react';
 import ProfileForm from './ProfileForm';
 import SettingsForm from './SettingsForm';
@@ -9,24 +10,16 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default async function ConfiguracionPage() {
-  const session = await getSession();
-  
-  if (!session) {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2 style={{ color: 'var(--danger)' }}>Acceso Denegado</h2>
-        <p>No tienes permisos para ver esta página.</p>
-      </div>
-    );
-  }
+  const user = await getPageUser();
+  if (!user) redirect('/login');
 
-  const dbUser = await prisma.user.findUnique({ where: { id: session.id as number } });
-  const isAdmin = session.role === 'ADMIN';
+  const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+  const isAdmin = user.role === 'ADMIN';
 
   const logs = isAdmin ? await prisma.systemLog.findMany({
     orderBy: { createdAt: 'desc' },
     take: 20,
-    include: { user: true }
+    include: { user: { select: { name: true } } }
   }) : [];
 
   const settings = isAdmin ? await prisma.systemSetting.findMany() : [];

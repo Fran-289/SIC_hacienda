@@ -47,6 +47,7 @@ dev.db
 dev.db-journal
 public/reports/
 public/uploads/
+/storage/
 *.js
 !next.config.js
 !postcss.config.js

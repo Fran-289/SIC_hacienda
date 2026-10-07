@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Pencil, Trash2, Shield, Search, X } from 'lucide-react';
 import { format } from 'date-fns';
+import { apiFetch } from '@/lib/client/api';
 
 type UserData = {
   id: number;
@@ -52,7 +53,7 @@ export default function ClientUsuariosTable({ initialUsers, currentUserId }: { i
     setShowModal(true);
   };
 
-  const openEditModal = (user: any) => {
+  const openEditModal = (user: UserData) => {
     setEditingUser(user);
     
     let parsedPerms: string[] = [];
@@ -115,7 +116,7 @@ export default function ClientUsuariosTable({ initialUsers, currentUserId }: { i
       const url = editingUser ? `/api/usuarios/${editingUser.id}` : '/api/usuarios';
       const method = editingUser ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -130,7 +131,7 @@ export default function ClientUsuariosTable({ initialUsers, currentUserId }: { i
       }
 
       // Refresh list
-      const updatedListRes = await fetch('/api/usuarios');
+      const updatedListRes = await apiFetch('/api/usuarios');
       if (updatedListRes.ok) {
         const updatedList = await updatedListRes.json();
         setUsers(updatedList);
@@ -146,7 +147,7 @@ export default function ClientUsuariosTable({ initialUsers, currentUserId }: { i
 
   const handleDelete = async (id: number) => {
     try {
-      const res = await fetch(`/api/usuarios/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/usuarios/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setUsers(users.filter(u => u.id !== id));
         setShowDeleteConfirm(null);
@@ -297,7 +298,8 @@ export default function ClientUsuariosTable({ initialUsers, currentUserId }: { i
                     {!editingUser && <span style={{ color: 'var(--danger)' }}>*</span>}
                   </label>
                   <input 
-                    type="text" 
+                    type="password" 
+                    autoComplete="new-password"
                     className="input-control" 
                     required={!editingUser} 
                     value={formData.password} 

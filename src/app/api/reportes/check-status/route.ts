@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAuthz } from '@/lib/authz';
 
 export async function GET(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
+    const auth = await requireAuthz('reportes');
+    if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(req.url);
     const tipo = searchParams.get('tipo');

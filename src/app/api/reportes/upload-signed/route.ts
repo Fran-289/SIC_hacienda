@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAuthz } from '@/lib/authz';
+import { STORAGE_ROOT, storagePublicUrl } from '@/lib/storage';
 import fs from 'fs';
 import path from 'path';
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
+    const auth = await requireAuthz('reportes');
+    if (!auth.ok) return auth.response;
+    const session = auth.user;
 
     const formData = await req.formData();
     const file = formData.get('file') as File;
@@ -31,7 +31,18 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const reportsDir = path.join(process.cwd(), 'public', 'reports');
+    // Solo PDF: magic bytes %PDF- y tope de tamaño
+    const isPdf = buffer.length >= 5 &&
+      buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46 && buffer[4] === 0x2d;
+    const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB
+    if (!isPdf) {
+      return NextResponse.json({ error: 'El archivo debe ser un PDF válido' }, { status: 400 });
+    }
+    if (buffer.length > MAX_FILE_BYTES) {
+      return NextResponse.json({ error: 'Tamaño de archivo inválido (máx. 25 MB)' }, { status: 400 });
+    }
+
+    const reportsDir = path.join(STORAGE_ROOT, 'reports');
     if (!fs.existsSync(reportsDir)) {
       fs.mkdirSync(reportsDir, { recursive: true });
     }
@@ -39,7 +50,7 @@ export async function POST(req: Request) {
     const safeUserName = (session.name as string).replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
     const filename = `${document.reportType}_${document.group.periodMonth}_${document.group.periodYear}_firmado_${safeUserName}_${Date.now()}.pdf`;
     const filePath = path.join(reportsDir, filename);
-    const publicUrl = `/reports/${filename}`;
+    const publicUrl = storagePublicUrl(`reports/${filename}`);
 
     fs.writeFileSync(filePath, buffer);
 

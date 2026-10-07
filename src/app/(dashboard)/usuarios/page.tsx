@@ -1,19 +1,14 @@
-import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getPageUser } from '@/lib/authz';
+import { redirect } from 'next/navigation';
 import ClientUsuariosTable from './ClientUsuariosTable';
 import { Users } from 'lucide-react';
 
 export default async function UsuariosPage() {
-  const session = await getSession();
-  
-  if (!session || session.role !== 'ADMIN') {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2 style={{ color: 'var(--danger)' }}>Acceso Denegado</h2>
-        <p>No tienes permisos para ver esta página.</p>
-      </div>
-    );
-  }
+  const user = await getPageUser();
+
+  if (!user) redirect('/login');
+  if (user.role !== 'ADMIN') redirect('/configuracion');
 
   const initialUsers = await prisma.user.findMany({
     select: {
@@ -43,7 +38,7 @@ export default async function UsuariosPage() {
       </div>
 
       <div className="glass-panel" style={{ overflow: 'hidden' }}>
-        <ClientUsuariosTable initialUsers={initialUsers} currentUserId={session.id as number} />
+        <ClientUsuariosTable initialUsers={initialUsers} currentUserId={user.id} />
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { getSession } from '@/lib/auth';
+import { getPageUser, hasModule } from '@/lib/authz';
 import { redirect } from 'next/navigation';
 import ClientHistorial from './ClientHistorial';
 
@@ -7,8 +7,9 @@ export const metadata = {
 };
 
 export default async function HistorialPage() {
-  const session = await getSession();
-  if (!session) redirect('/login');
+  const user = await getPageUser();
+  if (!user) redirect('/login');
+  if (!hasModule(user, 'reportes')) redirect('/configuracion');
   
   const currentYear = new Date().getFullYear();
 

@@ -1,20 +1,27 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAuthz } from '@/lib/authz';
 import { generateReportInternal } from '../reportUtils';
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
+    const auth = await requireAuthz('reportes');
+    if (!auth.ok) return auth.response;
+    const session = auth.user;
 
     const body = await req.json();
     const { grupo, mes, anio, estado, banco } = body;
 
     if (!grupo || !mes || !anio || !estado) {
       return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 });
+    }
+
+    if (typeof estado !== 'string' || !['PRELIMINAR', 'DEFINITIVO', 'DEFINITIVO MODIFICADO', 'N/A'].includes(estado)) {
+      return NextResponse.json({ error: 'Estado inválido' }, { status: 400 });
+    }
+
+    if (estado.startsWith('DEFINITIVO') && session.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
 
     let reportTypes: string[] = [];

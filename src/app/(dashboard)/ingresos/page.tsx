@@ -1,25 +1,15 @@
 import { prisma } from '@/lib/prisma';
 import ClientIngresosTable from './ClientIngresosTable';
-import { getSession } from '@/lib/auth';
+import { getPageUser, hasModule } from '@/lib/authz';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export default async function IngresosPage() {
-  const session = await getSession();
-  const dbUser = session ? await prisma.user.findUnique({ where: { id: session.id as number } }) : null;
-  let userPermissions: string[] = [];
-  try {
-    if (dbUser?.permissions) userPermissions = JSON.parse(dbUser.permissions);
-  } catch(e) {}
+  const user = await getPageUser();
 
-  if (!session || (session.role !== 'ADMIN' && !userPermissions.includes('ingresos'))) {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2 style={{ color: 'var(--danger)' }}>Acceso Denegado</h2>
-        <p>No tienes permisos para ver esta página.</p>
-      </div>
-    );
-  }
+  if (!user) redirect('/login');
+  if (!hasModule(user, 'ingresos')) redirect('/configuracion');
   const records = await prisma.record.findMany({
     orderBy: { id: 'desc' },
     take: 100,

@@ -1,10 +1,14 @@
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { type RowInput } from 'jspdf-autotable';
 import { getMonthNameSpanish, formatCurrency, getMetadataString } from '../utils';
+import { formatDateOnly } from '@/lib/utils/dateUtils';
 import ExcelJS from 'exceljs';
 import { format } from 'date-fns';
+import type { Record as DbRecord } from '@prisma/client';
 
-export async function generateCajaPDF(records: any[], saldoAnteriorRecords: any[], month: number, year: number, settings: Record<string, string> = {}) {
+type DocWithAutoTable = jsPDF & { lastAutoTable: { finalY: number } };
+
+export async function generateCajaPDF(records: DbRecord[], saldoAnteriorRecords: DbRecord[], month: number, year: number, settings: Record<string, string> = {}) {
   const doc = new jsPDF({ orientation: 'portrait' });
   const pageWidth = doc.internal.pageSize.width;
   const margin = 14;
@@ -48,7 +52,7 @@ export async function generateCajaPDF(records: any[], saldoAnteriorRecords: any[
   saldoAnteriorRecords.forEach(r => {
      totalSaldoAnterior += r.depositAmount;
      if (r.concentrationDate) {
-        const d = format(new Date(r.concentrationDate), 'dd/MM/yyyy');
+        const d = formatDateOnly(r.concentrationDate);
         if (!concentraciones[d]) concentraciones[d] = 0;
         concentraciones[d] += r.depositAmount;
      }
@@ -61,12 +65,13 @@ export async function generateCajaPDF(records: any[], saldoAnteriorRecords: any[
      
      let isNextMonth = false;
      if (r.concentrationDate) {
-        const cMonth = new Date(r.concentrationDate).getMonth() + 1;
-        const cYear = new Date(r.concentrationDate).getFullYear();
+        const c = new Date(r.concentrationDate);
+        const cMonth = c.getUTCMonth() + 1;
+        const cYear = c.getUTCFullYear();
         if ((month === 12 && cMonth === 1 && cYear === year + 1) || (month < 12 && cMonth === month + 1 && cYear === year)) {
            isNextMonth = true;
         } else if (cMonth === month && cYear === year) {
-           const d = format(new Date(r.concentrationDate), 'dd/MM/yyyy');
+           const d = formatDateOnly(r.concentrationDate);
            if (!concentraciones[d]) concentraciones[d] = 0;
            concentraciones[d] += r.depositAmount;
         } else {
@@ -89,12 +94,12 @@ export async function generateCajaPDF(records: any[], saldoAnteriorRecords: any[
 
   const f = (val: number) => `$       ${formatCurrency(val).replace('$', '')}`;
 
-  const bodyData: any[] = [];
+  const bodyData: RowInput[] = [];
   
   bodyData.push(['', '', 'SALDO ANTERIOR', '', f(totalSaldoAnterior), '']);
   saldoAnteriorRecords.forEach(r => {
-    const depStr = format(new Date(r.depositDate), 'dd/MM/yyyy');
-    const concStr = r.concentrationDate ? format(new Date(r.concentrationDate), 'dd/MM/yyyy') : '-';
+    const depStr = formatDateOnly(r.depositDate);
+    const concStr = formatDateOnly(r.concentrationDate);
     bodyData.push(['', '', `      Transferencia del:   ${depStr} Concentración de   ${concStr}`, f(r.depositAmount), '', '']);
   });
   
@@ -126,8 +131,9 @@ export async function generateCajaPDF(records: any[], saldoAnteriorRecords: any[
   records.forEach(r => {
      let isNextMonth = false;
      if (r.concentrationDate) {
-        const cMonth = new Date(r.concentrationDate).getMonth() + 1;
-        const cYear = new Date(r.concentrationDate).getFullYear();
+        const c = new Date(r.concentrationDate);
+        const cMonth = c.getUTCMonth() + 1;
+        const cYear = c.getUTCFullYear();
         if ((month === 12 && cMonth === 1 && cYear === year + 1) || (month < 12 && cMonth === month + 1 && cYear === year)) {
            isNextMonth = true;
         } else if (cMonth !== month || cYear !== year) {
@@ -138,8 +144,8 @@ export async function generateCajaPDF(records: any[], saldoAnteriorRecords: any[
      }
 
      if (isNextMonth) {
-        const depStr = format(new Date(r.depositDate), 'dd/MM/yyyy');
-        const concStr = r.concentrationDate ? format(new Date(r.concentrationDate), 'dd/MM/yyyy') : '-';
+        const depStr = formatDateOnly(r.depositDate);
+        const concStr = formatDateOnly(r.concentrationDate);
         bodyData.push(['', '', `      Transferencia del:   ${depStr} Concentración de   ${concStr}`, f(r.depositAmount), '', '']);
      }
   });
@@ -168,7 +174,7 @@ export async function generateCajaPDF(records: any[], saldoAnteriorRecords: any[
     },
     didParseCell: (data) => {
       // Bold certain rows
-      const concept = (data.row.raw as any)[2] as string;
+      const concept = (data.row.raw as unknown as Record<number, unknown>)[2] as string;
       if (typeof concept === 'string' && (
           concept === 'SALDO ANTERIOR' || 
           concept === 'TOTAL INGRESOS' || 
@@ -191,7 +197,7 @@ export async function generateCajaPDF(records: any[], saldoAnteriorRecords: any[
     }
   });
 
-  let finalY = (doc as any).lastAutoTable.finalY || 100;
+  let finalY = (doc as DocWithAutoTable).lastAutoTable.finalY || 100;
   
   if (finalY + 45 > doc.internal.pageSize.height) {
     doc.addPage();
@@ -220,7 +226,7 @@ export async function generateCajaPDF(records: any[], saldoAnteriorRecords: any[
   return { blob, filename: `Caja_${month}_${year}.pdf`, signatureY };
 }
 
-export async function generateCajaExcel(records: any[], saldoAnteriorRecords: any[], month: number, year: number, settings: Record<string, string> = {}) {
+export async function generateCajaExcel(records: DbRecord[], saldoAnteriorRecords: DbRecord[], month: number, year: number, settings: Record<string, string> = {}) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Informe de Caja');
 
@@ -374,8 +380,9 @@ export async function generateCajaExcel(records: any[], saldoAnteriorRecords: an
   records.forEach(r => {
      let isNextMonth = false;
      if (r.concentrationDate) {
-        const cMonth = new Date(r.concentrationDate).getMonth() + 1;
-        const cYear = new Date(r.concentrationDate).getFullYear();
+        const c = new Date(r.concentrationDate);
+        const cMonth = c.getUTCMonth() + 1;
+        const cYear = c.getUTCFullYear();
         if ((month === 12 && cMonth === 1 && cYear === year + 1) || (month < 12 && cMonth === month + 1 && cYear === year)) {
            isNextMonth = true;
         } else if (cMonth !== month || cYear !== year) {
@@ -386,8 +393,8 @@ export async function generateCajaExcel(records: any[], saldoAnteriorRecords: an
      }
 
      if (isNextMonth) {
-        const depStr = format(new Date(r.depositDate), 'dd/MM/yyyy');
-        const concStr = r.concentrationDate ? format(new Date(r.concentrationDate), 'dd/MM/yyyy') : '-';
+        const depStr = formatDateOnly(r.depositDate);
+        const concStr = formatDateOnly(r.concentrationDate);
         addRow('', '', `      Transferencia del:   ${depStr} Concentración de   ${concStr}`, r.depositAmount, '', '');
      }
   });

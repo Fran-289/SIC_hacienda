@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Save, Upload } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { apiFetch } from '@/lib/client/api';
 
 export default function SettingsForm({ initialSettings }: { initialSettings: Record<string, string> }) {
   const router = useRouter();
@@ -20,6 +21,10 @@ export default function SettingsForm({ initialSettings }: { initialSettings: Rec
     firma_aprobo_cargo: initialSettings.firma_aprobo_cargo || 'JEFE DEPTO. DE INGRESOS DE COLECTURIAS DE ADUANAS',
     logo_izquierdo: initialSettings.logo_izquierdo || '',
     logo_derecho: initialSettings.logo_derecho || '',
+    notif_rree_to: initialSettings.notif_rree_to || 'jachavez@rree.gob.sv',
+    notif_rree_cc: initialSettings.notif_rree_cc || 'hugo.martinez@mh.gob.sv;santiago.mendez@rree.gob.sv;aurbina@rree.gob.sv;ronal.aguilar@mh.gob.sv',
+    notif_banco_to: initialSettings.notif_banco_to || 'Magdalena.galan@bancocuscatlan.com',
+    notif_banco_cc: initialSettings.notif_banco_cc || 'hugo.martinez@mh.gob.sv;ronal.aguilar@mh.gob.sv',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,7 +60,7 @@ export default function SettingsForm({ initialSettings }: { initialSettings: Rec
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch('/api/settings', {
+      const res = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings }),
@@ -167,6 +172,32 @@ export default function SettingsForm({ initialSettings }: { initialSettings: Rec
             <div>
               <label className="input-label">Diversos</label>
               <input type="text" className="input-control" name="caja_codigo_diversos" value={settings.caja_codigo_diversos} onChange={handleChange} />
+            </div>
+          </div>
+        </div>
+
+        {/* Notificaciones */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', gridColumn: '1 / -1' }}>
+          <h4 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Notificaciones por Correo</h4>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Separados por punto y coma. El servidor SMTP se configura en el archivo .env (SMTP_HOST, SMTP_USER, SMTP_PASS).
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div>
+              <label className="input-label">RREE — Para</label>
+              <input type="text" className="input-control" name="notif_rree_to" value={settings.notif_rree_to} onChange={handleChange} />
+            </div>
+            <div>
+              <label className="input-label">RREE — Con copia</label>
+              <input type="text" className="input-control" name="notif_rree_cc" value={settings.notif_rree_cc} onChange={handleChange} />
+            </div>
+            <div>
+              <label className="input-label">Banco Cuscatlán — Para</label>
+              <input type="text" className="input-control" name="notif_banco_to" value={settings.notif_banco_to} onChange={handleChange} />
+            </div>
+            <div>
+              <label className="input-label">Banco Cuscatlán — Con copia</label>
+              <input type="text" className="input-control" name="notif_banco_cc" value={settings.notif_banco_cc} onChange={handleChange} />
             </div>
           </div>
         </div>

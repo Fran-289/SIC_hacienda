@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:migrate-status": "npx tsx prisma/migrate-status.ts",
+    "reset-admin": "npx tsx prisma/reset-password.ts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",
@@ -19,11 +22,11 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.21.0",
-    "next": "16.2.9",
+    "next": "^16.3.8",
+    "nodemailer": "^10.0.15",
     "pdf-lib": "^1.17.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -32,10 +35,12 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^18.0.5",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "^16.3.8",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",

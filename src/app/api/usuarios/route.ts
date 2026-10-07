@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAdminAuthz } from '@/lib/authz';
+import { PERMISSION_MODULES, type PermissionModule } from '@/lib/modules';
 import bcrypt from 'bcryptjs';
 
 // GET: Listar todos los usuarios
 export async function GET(request: Request) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-    }
+    const auth = await requireAdminAuthz();
+    if (!auth.ok) return auth.response;
 
     const users = await prisma.user.findMany({
       select: {
@@ -25,19 +24,18 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(users);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching users:", error);
-    return NextResponse.json({ error: 'Error al obtener usuarios', details: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Error al obtener usuarios', details: error instanceof Error ? error.message : 'Error desconocido' }, { status: 500 });
   }
 }
 
 // POST: Crear un nuevo usuario
 export async function POST(request: Request) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-    }
+    const auth = await requireAdminAuthz();
+    if (!auth.ok) return auth.response;
+    const session = auth.user;
 
     const body = await request.json();
     const { email, password, name, role, jobTitle, permissions } = body;
@@ -53,6 +51,14 @@ export async function POST(request: Request) {
     }
     if (!name || name.trim().length === 0) {
       return NextResponse.json({ error: 'El nombre es obligatorio' }, { status: 400 });
+    }
+    if (role !== undefined && role !== null && !['ADMIN', 'USER'].includes(role)) {
+      return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
+    }
+    if (permissions !== undefined && permissions !== null) {
+      if (!Array.isArray(permissions) || permissions.some((p: unknown) => !PERMISSION_MODULES.includes(p as PermissionModule))) {
+        return NextResponse.json({ error: 'Permisos inválidos' }, { status: 400 });
+      }
     }
 
     // Comprobar que no exista el correo
@@ -80,32 +86,35 @@ export async function POST(request: Request) {
       }
     }
 
-    // Crear usuario
-    const newUser = await prisma.user.create({
-      data: {
-        id: targetId,
-        email,
-        password: hashedPassword,
-        name,
-        role: role || 'USER',
-        jobTitle: jobTitle || null,
-        permissions: permissions ? JSON.stringify(permissions) : null
-      }
-    });
+    // Crear usuario + bitácora de forma atómica
+    const newUser = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          id: targetId,
+          email,
+          password: hashedPassword,
+          name,
+          role: role || 'USER',
+          jobTitle: jobTitle || null,
+          permissions: permissions ? JSON.stringify(permissions) : null
+        }
+      });
 
-    // Guardar en bitácora
-    await prisma.systemLog.create({
-      data: {
-        userId: session.id as number,
-        userName: session.name as string,
-        action: 'CREATE_USER',
-        details: `Usuario creado: ${email}`
-      }
+      await tx.systemLog.create({
+        data: {
+          userId: session.id,
+          userName: session.name,
+          action: 'CREATE_USER',
+          details: `Usuario creado: ${email}`
+        }
+      });
+
+      return created;
     });
 
     return NextResponse.json({ success: true, userId: newUser.id });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error creating user:", error);
-    return NextResponse.json({ error: 'Error al crear usuario', details: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Error al crear usuario', details: error instanceof Error ? error.message : 'Error desconocido' }, { status: 500 });
   }
 }

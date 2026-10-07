@@ -10,6 +10,17 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { apiFetch } from '@/lib/client/api';
+
+function escapeHtml(str: unknown): string {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 type Consulate = {
   id: number;
@@ -54,7 +65,7 @@ export default function ClientPage({ initialConsulates, currentUserName }: { ini
     createdAt: format(new Date(), 'yyyy-MM-dd')
   });
 
-  let filteredConsulates = consulates.filter(c => 
+  const filteredConsulates = consulates.filter(c => 
     c.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.country.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.region.toLowerCase().includes(searchTerm.toLowerCase())
@@ -62,8 +73,8 @@ export default function ClientPage({ initialConsulates, currentUserName }: { ini
 
   if (sortConfig !== null) {
     filteredConsulates.sort((a, b) => {
-      let aValue: any = a[sortConfig.key as keyof Consulate];
-      let bValue: any = b[sortConfig.key as keyof Consulate];
+      let aValue = a[sortConfig.key as keyof Consulate] as string | number | { name: string };
+      let bValue = b[sortConfig.key as keyof Consulate] as string | number | { name: string };
       
       // Casos especiales para objetos anidados
       if (sortConfig.key === 'createdBy') {
@@ -124,7 +135,7 @@ export default function ClientPage({ initialConsulates, currentUserName }: { ini
     try {
       if (showEditModal) {
         // Edit Mode
-        const res = await fetch(`/api/catalogos/procedencias/${formData.id}`, {
+        const res = await apiFetch(`/api/catalogos/procedencias/${formData.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(submissionData)
@@ -143,7 +154,7 @@ export default function ClientPage({ initialConsulates, currentUserName }: { ini
         setShowEditModal(false);
       } else {
         // Add Mode
-        const res = await fetch('/api/catalogos/procedencias', {
+        const res = await apiFetch('/api/catalogos/procedencias', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(submissionData)
@@ -420,14 +431,14 @@ export default function ClientPage({ initialConsulates, currentUserName }: { ini
               ${filteredConsulates.map((c, index) => `
                 <tr>
                   <td>${String(index + 1).padStart(2, '0')}</td>
-                  <td>${c.type}</td>
-                  <td>${c.region}</td>
-                  <td>${c.country}</td>
-                  <td>${c.location}</td>
-                  <td>${c.address || 'N/A'}</td>
-                  <td>${c.status}</td>
-                  <td>${c.createdBy?.name || 'Sistema'}</td>
-                  <td>${c.updatedAt ? format(new Date(c.updatedAt), 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'}</td>
+                  <td>${escapeHtml(c.type)}</td>
+                  <td>${escapeHtml(c.region)}</td>
+                  <td>${escapeHtml(c.country)}</td>
+                  <td>${escapeHtml(c.location)}</td>
+                  <td>${escapeHtml(c.address || 'N/A')}</td>
+                  <td>${escapeHtml(c.status)}</td>
+                  <td>${escapeHtml(c.createdBy?.name || 'Sistema')}</td>
+                  <td>${escapeHtml(c.updatedAt ? format(new Date(c.updatedAt), 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A')}</td>
                 </tr>
               `).join('')}
             </tbody>

@@ -1,12 +1,30 @@
 'use client';
 
 import { useState } from 'react';
-import { format } from 'date-fns';
+import { formatDateOnly } from '@/lib/utils/dateUtils';
+import { statusLabel } from '@/lib/utils/status';
 import { CheckCircle, MapPin, Calendar, DollarSign, ArrowLeft, Building2, Wallet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function ClientVerPage({ initialData }: { initialData: any }) {
+type IngresoData = {
+  id: number;
+  status: string;
+  depositDate: Date;
+  depositAmount: number;
+  concentrationDate: Date | null;
+  days: number | null;
+  region: string | null;
+  country: string | null;
+  location: string | null;
+  passportValue: number;
+  duiValue: number;
+  consularValue: number;
+  commissionValue: number;
+  diversosValue: number;
+};
+
+export default function ClientVerPage({ initialData }: { initialData: IngresoData }) {
   const router = useRouter();
 
   const getProcedenciaText = () => {
@@ -54,7 +72,7 @@ export default function ClientVerPage({ initialData }: { initialData: any }) {
             <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Estado del Registro</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-primary)', fontWeight: 600, fontSize: '1.25rem' }}>
               <CheckCircle size={24} />
-              {initialData.status}
+              {statusLabel(initialData.status)}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -75,7 +93,7 @@ export default function ClientVerPage({ initialData }: { initialData: any }) {
             
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Fecha Depósito</div>
-              <div style={{ fontWeight: 500 }}>{format(new Date(initialData.depositDate), 'dd/MM/yyyy')}</div>
+              <div style={{ fontWeight: 500 }}>{formatDateOnly(initialData.depositDate)}</div>
             </div>
 
             <div>
@@ -85,7 +103,7 @@ export default function ClientVerPage({ initialData }: { initialData: any }) {
 
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Fecha Concentración</div>
-              <div style={{ fontWeight: 500 }}>{initialData.concentrationDate ? format(new Date(initialData.concentrationDate), 'dd/MM/yyyy') : '-'}</div>
+              <div style={{ fontWeight: 500 }}>{formatDateOnly(initialData.concentrationDate)}</div>
             </div>
 
             <div>

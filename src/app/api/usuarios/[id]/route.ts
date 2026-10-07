@@ -1,21 +1,22 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { requireAdminAuthz } from '@/lib/authz';
+import { PERMISSION_MODULES, type PermissionModule } from '@/lib/modules';
 import bcrypt from 'bcryptjs';
+import type { Prisma } from '@prisma/client';
 
 // PUT: Actualizar un usuario
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-    }
+    const auth = await requireAdminAuthz();
+    if (!auth.ok) return auth.response;
+    const session = auth.user;
 
     const { id } = await params;
     const body = await request.json();
     const { email, password, name, role, jobTitle, permissions } = body;
 
-    const dataToUpdate: any = {};
+    const dataToUpdate: Prisma.UserUpdateInput = {};
 
     if (email) {
       if (!/^\S+@\S+\.\S+$/.test(email)) {
@@ -39,39 +40,48 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       dataToUpdate.password = await bcrypt.hash(password, salt);
     }
 
+    if (role !== undefined && role !== null && role !== '' && !['ADMIN', 'USER'].includes(role)) {
+      return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
+    }
+    if (permissions !== undefined && permissions !== null &&
+        (!Array.isArray(permissions) || permissions.some((p: unknown) => !PERMISSION_MODULES.includes(p as PermissionModule)))) {
+      return NextResponse.json({ error: 'Permisos inválidos' }, { status: 400 });
+    }
+
     if (name && name.trim().length > 0) dataToUpdate.name = name;
     if (role) dataToUpdate.role = role;
     if (jobTitle !== undefined) dataToUpdate.jobTitle = jobTitle;
     if (permissions !== undefined) dataToUpdate.permissions = permissions ? JSON.stringify(permissions) : null;
 
-    const updatedUser = await prisma.user.update({
-      where: { id: Number(id) },
-      data: dataToUpdate
-    });
+    await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: Number(id) },
+        data: dataToUpdate
+      });
 
-    await prisma.systemLog.create({
-      data: {
-        userId: session.id as number,
-        userName: session.name as string,
-        action: 'UPDATE_USER',
-        details: `Usuario actualizado: ${updatedUser.email}`
-      }
+      await tx.systemLog.create({
+        data: {
+          userId: session.id,
+          userName: session.name,
+          action: 'UPDATE_USER',
+          details: `Usuario actualizado: ${updatedUser.email}`
+        }
+      });
     });
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error updating user:", error);
-    return NextResponse.json({ error: 'Error al actualizar usuario', details: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Error al actualizar usuario', details: error instanceof Error ? error.message : 'Error desconocido' }, { status: 500 });
   }
 }
 
 // DELETE: Eliminar un usuario
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-    }
+    const auth = await requireAdminAuthz();
+    if (!auth.ok) return auth.response;
+    const session = auth.user;
 
     const { id } = await params;
 
@@ -85,23 +95,24 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
     }
 
-    // El cascade en prisma asegurará que los logs de este usuario también se eliminen
-    await prisma.user.delete({
-      where: { id: Number(id) }
-    });
+    await prisma.$transaction(async (tx) => {
+      await tx.user.delete({
+        where: { id: Number(id) }
+      });
 
-    await prisma.systemLog.create({
-      data: {
-        userId: session.id as number,
-        userName: session.name as string,
-        action: 'DELETE_USER',
-        details: `Usuario eliminado: ${userToDelete.email}`
-      }
+      await tx.systemLog.create({
+        data: {
+          userId: session.id,
+          userName: session.name,
+          action: 'DELETE_USER',
+          details: `Usuario eliminado: ${userToDelete.email}`
+        }
+      });
     });
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error deleting user:", error);
-    return NextResponse.json({ error: 'Error al eliminar usuario', details: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Error al eliminar usuario', details: error instanceof Error ? error.message : 'Error desconocido' }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { Save, CheckCircle, Upload, User as UserIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { apiFetch } from '@/lib/client/api';
 
 const DEFAULT_AVATARS = ['👨‍💼', '👩‍💼', '🧑‍💻', '👩‍💻'];
 
@@ -36,7 +37,7 @@ export default function ProfileForm({ user, isAdmin = false }: { user: { name: s
     setSuccess(false);
 
     try {
-      const res = await fetch('/api/users/profile', {
+      const res = await apiFetch('/api/users/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, avatar }),

@@ -8,7 +8,7 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prismaRefactored5 ??
   new PrismaClient({
-    adapter: new PrismaBetterSqlite3({ url: 'file:./dev.db' }),
+    adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL || 'file:./dev.db' }),
   });
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prismaRefactored5 = prisma;
